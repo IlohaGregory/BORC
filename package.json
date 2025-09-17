@@ -1,19 +1,18 @@
 {
   "name": "demo",
-  "version": "1.0.0",
-  "main": "index.js",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite --open",
+    "build": "vite build",
+    "preview": "vite preview --open"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "@coinbase/onchainkit": "^1.0.2",
-    "phaser": "^3.90.0"
+    "@coinbase/onchainkit": "^1.1.0",
+    "phaser": "^3.80.1"
   },
   "devDependencies": {
-    "vite": "^7.1.5"
+    "vite": "^5.4.0"
   }
 }

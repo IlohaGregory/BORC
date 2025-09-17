@@ -1,0 +1,13 @@
+    /* Full-bleed background and crisp pixel rendering for the canvas */
+    html,body { height:100%; margin:0; background:#0d0f1a; }
+    #game { image-rendering: pixelated; }
+    canvas { outline:none }
+
+    /* Tiny utility classes for menu UI (DOM overlay) */
+    .btn {
+      font-family: monospace; padding:8px 12px;
+      border:1px solid #fff; background:transparent; color:#fff; cursor:pointer;
+    }
+    .panel {
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    }
