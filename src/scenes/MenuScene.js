@@ -1,7 +1,7 @@
 /**
  *Wallet sign-in + editable display name, then start game.
  * Using a DOM overlay keeps UI simple without bringing in a UI library.
-//  */
+*/
 // src/scenes/MenuScene.js
 import { walletService, CHAINS } from '../services/WalletService.js';
 import { profileService } from '../services/ProfileService.js';
@@ -15,7 +15,7 @@ export default class MenuScene extends Phaser.Scene {
 
     const panel = document.createElement('div'); panel.className='panel'; this.add.dom(0,0, panel);
     panel.innerHTML = `
-      <div style="display:flex;gap:12px;flex-direction:column;align-items:center">
+      <div style="display:flex;gap:12px;flex-direction:column;align-items:center;">
         <button id="connect" class="btn">Connect Wallet</button>
         <input id="name" placeholder="Display name" style="padding:8px;font-family:monospace"/>
         <div id="msg" style="min-height:18px;color:#aaa;font-family:monospace;font-size:12px;"></div>

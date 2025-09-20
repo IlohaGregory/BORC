@@ -1,25 +1,6 @@
 /**
  * AnimController — tiny brain that chooses which animation to play
  * based on the ACTOR'S CURRENT MOVEMENT VECTOR in a top-down game.
- *
- * WHY THIS EXISTS:
- *  - We want to keep the rest of your gameplay code dumb/simple:
- *      "set velocity" → AnimController figures out which sheet to play.
- *  - We need to map "positive" vs "negative" sheets to front/back views:
- *      - If moving DOWN (vy > 0)  → FRONT (+ve) sheet
- *      - If moving UP   (vy < 0)  → BACK  (-ve) sheet
- *  - For horizontal movement, we flip the sprite (scaleX) so the legs/pose
- *    look correct even with only front/back art.
- *
- * HOW TO USE:
- *  const anim = new AnimController(sprite, {
- *    idle_front: 'p_idle_front',
- *    idle_back:  'p_idle_back',
- *    walk_front: 'p_walk_front',
- *    walk_back:  'p_walk_back'
- *  });
- *  // In your update loop:
- *  anim.updateFromVelocity(sprite.body.velocity.x, sprite.body.velocity.y);
  */
 
 export default class AnimController {
@@ -36,22 +17,12 @@ export default class AnimController {
     this._lastFacing = 'front';      // cache which view we played last ('front'|'back')
     this._lastAnim = '';             // cache last anim key to avoid restarts every frame
   }
-
-  /**
-   * Decide what to play given velocity components (vx, vy).
-   * RULES:
-   *  - If very slow (below deadZone), play the *idle* variant of whichever view (front/back)
-   *    best matches the most recent vertical direction (vy sign) to avoid flicker.
-   *  - If moving, pick view by vy:
-   *      vy > 0  → FRONT (walking down toward camera)
-   *      vy < 0  → BACK  (walking up away from camera)
-   *  - Flip sprite horizontally when moving left vs right so it "leans" the right way.
-   */
+  
+// Walk animation handler
   updateFromVelocity(vx, vy){
     const speed = Math.hypot(vx, vy);
 
     // Horizontal flip: if vx<0, face left; if vx>0, face right.
-    // This does not change which sheet (front/back) we choose; it just mirrors it.
     if (vx < -this.dead) this.s.setFlipX(true);
     else if (vx > this.dead) this.s.setFlipX(false);
     // (If |vx| small, we keep previous flip to avoid jitter when stopping)
@@ -82,13 +53,15 @@ export default class AnimController {
    * @param {string|undefined} keyBack
    */
   playAttack(view = 'front', keyFront, keyBack){
-    const k = (view === 'front') ? (keyFront || this.k.attack_front) : (keyBack || this.k.attack_back);
+    const k = (view === 'front') ? (keyFront || this.k.attack_front) : (keyBack || this.k.attack_front);
     if (k) {
+      console.log("attackin");
       this.s.anims.play(k, true);
       this._lastAnim = k;
       this._lastFacing = view;
     } else {
       // missing attack anim; gracefully fall back to walking
+      console.log("missin attack");
       this.s.anims.play(view==='front' ? this.k.walk_front : this.k.walk_back, true);
     }
   }

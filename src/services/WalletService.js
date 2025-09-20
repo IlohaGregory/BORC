@@ -1,4 +1,4 @@
-//  WalletService — vanilla wallet integration for BORC (Phaser, no React).
+//  WalletService — vanilla wallet integration for BORC.
 
 // src/services/WalletService.js
 import { createPublicClient, http } from 'viem';

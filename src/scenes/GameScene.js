@@ -4,9 +4,6 @@
  * - Handles player input (WASD + mouse aim/shoot)
  * - Calculates collisions/damage
  * - Emits score events the UI listens to
- *
- * NOTE: Everything uses simple shapes for MVP (the 'pixel' texture).
- * When you provide spritesheets, replace 'pixel' with actual keys and add animations.
  */
 
 import { CFG } from '../core/Config.js';
@@ -41,22 +38,21 @@ export default class GameScene extends Phaser.Scene {
 
     // Input
     this.cursors = this.input.keyboard.createCursorKeys();
-    this.keys = this.input.keyboard.addKeys('W,A,S,D');
-
+    this.keys = this.input.keyboard.addKeys('W,A,S,D,SPACE');
     // Collisions
     this.physics.add.overlap(this.bullets, this.enemies, this.onBulletHitsEnemy, null, this);
     this.physics.add.overlap(this.player,  this.enemies, this.onEnemyTouchesPlayer, null, this);
 
     // Spawn loop
     this.wave = 1;
-    this.time.addEvent({ delay: 1500, loop: true, callback: () => this.spawnWave() });
+    this.time.addEvent({ delay: 1500, loop: false, callback: () => this.spawnWave() });
 
     // Camera
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
   }
 
   update(time, delta){
-    if (this.gameOver) return;
+    if (this.gameOver || this.keys.SPACE.isDown) return;
 
     // Movement (WASD)
     const vx = (this.keys.A.isDown?-1:0) + (this.keys.D.isDown?1:0);
@@ -65,9 +61,10 @@ export default class GameScene extends Phaser.Scene {
     this.player.setVelocity(v.x, v.y);
 
     // Top-down aim toward the mouse (purely cosmetic body rotation for now)
-    const p = this.player; const m = this.input.activePointer;
-    const ang = Phaser.Math.Angle.Between(p.x, p.y, m.worldX, m.worldY);
-    this.player.setRotation(ang);
+    const p = this.player;
+    const m = this.input.activePointer;
+    const ang = Phaser.Math.Angle.Between(p.x, p.y, m.worldX, m.worldY); // angle to shoot in 
+    // this.player.setRotation(ang);
 
     // Animate player based on current velocity (front vs back decision happens inside)
     this.pAnim.updateFromVelocity(this.player.body.velocity.x, this.player.body.velocity.y);
@@ -89,6 +86,22 @@ export default class GameScene extends Phaser.Scene {
 
       // Animate enemies as they move. They only have FRONT sheets, so we always use FRONT.
       if (e._anim) e._anim.updateFromVelocity(e.body.velocity.x, e.body.velocity.y);
+
+      const dist = Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y);
+            
+      if (!e._attacking && dist < 32) {
+        e._attacking = true;
+        // play attack FRONT (only available set)
+        e._anim.playAttack('front', 'e_attack_front');
+
+        // deal damage after a short delay to sync with the white swipe frame
+        // this.time.delayedCall(200, () => { this.onEnemyTouchesPlayer(this.player, e); });
+        // return to walk after the animation finishes
+        e.on('animationcomplete', () => {
+          e._attacking = false;
+          e.anims.play('e_walk_front', true);
+        }, this);
+      }
     });
   }
 
@@ -117,13 +130,11 @@ export default class GameScene extends Phaser.Scene {
         walk_front: 'e_walk_front',
         walk_back:  'e_walk_front'   // back not available → use front
       }, { deadZone: 2 });
-
-      // Start walking immediately so they don't pop on first frame
       e.anims.play('e_walk_front', true);
+
+      
     }
 
     this.wave++;
   }
-
-  // ... (rest of GameScene unchanged: onBulletHitsEnemy, onEnemyTouchesPlayer, finish)
 }

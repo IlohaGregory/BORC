@@ -1,6 +1,5 @@
 /**
  * UIScene — a lightweight HUD overlay that listens for score events.
- * Why a separate scene? It simplifies layering (HUD always on top) and keeps UI logic isolated.
  */
 import { events } from '../core/Events.js';
 
@@ -11,7 +10,7 @@ export default class UIScene extends Phaser.Scene {
     this.profile = data.profile;
     const { width } = this.scale;
 
-    // Left: player name (editable in menu; address fallback)
+    // Left: player name
     this.nameTxt  = this.add.text(4, 2, this.profile.displayName, {
       fontFamily:'monospace', fontSize:8, color:'#7ec8e3'
     });

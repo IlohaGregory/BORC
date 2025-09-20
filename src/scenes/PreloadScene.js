@@ -1,15 +1,5 @@
-/*
- * Loads all art/audio and defines animation clips.
- * 
- *
- * RULES WE'RE FOLLOWING:
- *  - "positive" (+ve) sheets are the FRONT (character facing toward camera / walking DOWN).
- *  - "negative" (-ve) sheets are the BACK  (character walking UP, back toward camera).
- *  - We'll select which set to play at runtime based on movement direction.
- *  - For left/right, we reuse the chosen set and flipX when moving left.
- */
+// Loads all art/audio and defines animation clips.
 
-// const assetPath = '../../assets/sprites';
 export default class PreloadScene extends Phaser.Scene {
   constructor(){ super('Preload'); }
 
@@ -58,7 +48,7 @@ export default class PreloadScene extends Phaser.Scene {
     // BACK (up-facing) sets
     this.anims.create({
       key: 'p_idle_back',
-      frames: this.anims.generateFrameNumbers('p_idle_back', { start: 0, end: 3 }), // 2 frames
+      frames: this.anims.generateFrameNumbers('p_idle_back', { start: 0, end: 3 }), // 4 frames
       frameRate: 4,
       repeat: -1
     });

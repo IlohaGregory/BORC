@@ -1,6 +1,5 @@
 /**
  * GameOverScene — post-run results + retry.
- * Later, you can also save global scores here (backend) or show daily boards.
  */
 export default class GameOverScene extends Phaser.Scene {
   constructor(){ super('GameOver'); }

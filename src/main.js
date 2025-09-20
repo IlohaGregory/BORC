@@ -1,5 +1,5 @@
 // // import Phaser
-import Phaser, { Game } from "phaser";
+import Phaser from "phaser";
 
 //import game scenes
 import BootScene from './scenes/BootScene.js';
@@ -24,7 +24,7 @@ const config = {
     default: 'arcade',
     arcade: {
       gravity: { y: 0 },        // Top-down shooter => no gravity
-      debug: false              // Turn on for collision boxes while debugging
+      debug: true              // Turn on for collision boxes while debugging
     }
   },
   scale: {
@@ -33,8 +33,6 @@ const config = {
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
   dom: { createContainer: true },
-  overflow : false,
-  
   scene: [BootScene, PreloadScene, MenuScene, GameScene, UIScene, GameOverScene],
 };
 
