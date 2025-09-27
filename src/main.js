@@ -10,7 +10,7 @@ import UIScene from './scenes/UIScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
 
 // Virtual base size: 320x180 is a classic retro-friendly 16:9.
-const BASE_W = 320, BASE_H = 180;
+const BASE_W = 680, BASE_H = 270;
 
 const config = {
   type: Phaser.CANVAS,             //Skip default and just use canvas
@@ -37,9 +37,3 @@ const config = {
 };
 
 new Phaser.Game(config);
-
-
-
-
-
-

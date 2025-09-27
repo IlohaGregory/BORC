@@ -26,7 +26,11 @@ export default class PreloadScene extends Phaser.Scene {
       frameWidth: 216, frameHeight: 171
     });
 
-    // TODO : add bullet sprite
+    // bullet and weapon sprite
+    this.load.spritesheet('bullet', 'assets/Weapons/Bullet-Sheet.png', {
+      frameWidth : 16, frameHeight: 16
+    })
+    // this.load.image('bullet', 'assets/Weapons/Bullet-Sheet.png')
   };
 
   create(){
@@ -57,6 +61,8 @@ export default class PreloadScene extends Phaser.Scene {
       frames: this.anims.generateFrameNumbers('p_walk_back', { start: 0, end: 1 }), // 4 frames
       frameRate: 10,
       repeat: -1
+
+
     });
 
     // ENEMY Anims

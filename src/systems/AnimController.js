@@ -2,6 +2,7 @@
  * AnimController — tiny brain that chooses which animation to play
  * based on the ACTOR'S CURRENT MOVEMENT VECTOR in a top-down game.
  */
+import Phaser from "phaser";
 
 export default class AnimController {
   /**
@@ -16,10 +17,14 @@ export default class AnimController {
     this.dead = opts.deadZone ?? 4;  // pixels/sec below which movement is considered "idle"
     this._lastFacing = 'front';      // cache which view we played last ('front'|'back')
     this._lastAnim = '';             // cache last anim key to avoid restarts every frame
+    this._locked = false;
   }
   
 // Walk animation handler
   updateFromVelocity(vx, vy){
+
+    if(this._locked) return; //if attackin do not update velocity 
+
     const speed = Math.hypot(vx, vy);
 
     // Horizontal flip: if vx<0, face left; if vx>0, face right.
@@ -53,15 +58,19 @@ export default class AnimController {
    * @param {string|undefined} keyBack
    */
   playAttack(view = 'front', keyFront, keyBack){
-    const k = (view === 'front') ? (keyFront || this.k.attack_front) : (keyBack || this.k.attack_front);
+    const k = (view === 'front') ? (keyFront || this.k.attack_front) : (keyBack || this.k.attack_back);
     if (k) {
-      console.log("attackin");
+
+      this._locked = true;                 // 🔒 freeze auto-anim
       this.s.anims.play(k, true);
-      this._lastAnim = k;
-      this._lastFacing = view;
+
+      this.s.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + k, () => {
+        this._locked = false;
+        this._lastAnim = k;
+        this._lastFacing = view;
+      });
     } else {
       // missing attack anim; gracefully fall back to walking
-      console.log("missin attack");
       this.s.anims.play(view==='front' ? this.k.walk_front : this.k.walk_back, true);
     }
   }

@@ -26,12 +26,14 @@ class WalletService {
     this.cbSdk = null;
     this.provider = null;
     this.client = null;
+    this._inited = false;
 
     // Guard to avoid concurrent prompts
     this._connecting = false;
   }
 
   async init() {
+    if (this._inited) return;
     // PREFERRED: factory API → use getProvider()
    this.cbSdk = createCoinbaseWalletSDK({
      appName: 'BORC',
@@ -51,6 +53,7 @@ class WalletService {
 
     this.client = createPublicClient({ transport: http(ACTIVE.rpcUrl) });
     this._bindProviderEvents();
+    this._inited = true;
   }
 
   _bindProviderEvents() {
@@ -63,8 +66,8 @@ class WalletService {
     });
     this.provider.on?.('disconnect', () => { this.address = null; });
   }
-
-  getInjectedProvider() {
+  
+getInjectedProvider() {
     if (typeof window !== 'undefined' && window.ethereum) {
       // If multiple, prefer Coinbase if present; else first one
       const providers = window.ethereum.providers || [window.ethereum];
@@ -99,14 +102,6 @@ class WalletService {
     if (this._connecting) return Promise.reject(new Error('Already connecting'));
     this._connecting = true;
     try {
-      // If already connected (e.g., page refresh), skip prompting
-      const pre = await this.provider.request({ method: 'eth_accounts' });
-      if (pre?.length) {
-        this.address = pre[0];
-        this.displayName = this.shortAddress();
-        return { address: this.address, displayName: this.displayName };
-      }
-
       // Try Coinbase prompt
       try {
         const accounts = await this.provider.request({ method: 'eth_requestAccounts' });
@@ -191,3 +186,7 @@ class WalletService {
 }
 
 export const walletService = new WalletService();
+
+
+
+
