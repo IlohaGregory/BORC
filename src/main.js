@@ -29,7 +29,7 @@ const config = {
   },
   scale: {
     // FIT will preserve aspect ratio and letterbox if needed.
-    mode: Phaser.Scale.FIT,
+    mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
   dom: { createContainer: true },

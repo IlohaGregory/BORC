@@ -11,9 +11,9 @@ export default class MenuScene extends Phaser.Scene {
 
   create(){
     const { width } = this.scale;
-    this.add.text(width/2, 50, 'BORC', { fontFamily:'monospace', fontSize:24, color:'#fff' }).setOrigin(0.5);
+    this.add.text(width/2, this.scale.height/3 - 40, 'BORC', { fontFamily:'monospace', fontSize:38, color:'#4d73fdff' }).setOrigin(0.5);
 
-    const panel = document.createElement('div'); panel.className='panel'; this.add.dom(0,0, panel).setOrigin(0 );
+    const panel = document.createElement('div'); panel.className='panel'; this.add.dom(0,this.scale.height/3, panel).setOrigin(0);
     panel.innerHTML = `
       <div style="display:flex;gap:12px;flex-direction:column;align-items:center;">
         <button id="connect" class="btn">Connect Wallet</button>

@@ -6,36 +6,38 @@
  * - Emits score events the UI listens to
  */
 
+// src/scenes/GameScene.js
+// WHAT: Desktop uses FIT-like camera zoom; mobile portrait uses the 20px-player + min-width portrait zoom.
+// WHY: Desktop looks like your original layout; mobile shows more vertical without tiny sprites.
+
 import { CFG } from '../core/Config.js';
 import { events } from '../core/Events.js';
 import AnimController from '../systems/AnimController.js';
-import { Health } from '../systems/Health.js';
+import {
+  computePortraitZoom,
+  computeDesktopZoom,
+  lerpZoom
+} from '../systems/PortraitZoom.js';
+import { isDesktopLike } from '../utils/DeviceMode.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor(){ super('Game'); }
 
   create(data){
-    this.profile = data.profile;
+    // ── Session/score state
+    this.profile = data?.profile || { displayName: 'Ranger' };
     this.score = 0;
     this.gameOver = false;
 
-    // groups
+    // ── Groups
     this.bullets = this.physics.add.group();
     this.enemies = this.physics.add.group();
 
-    // ─── PLAYER ────────────────────────────────────────────────────────────────
+    // ── Player sprite + basic setup
     this.player = this.physics.add.sprite(160, 90, 'p_idle_front', 0).setScale(1);
     this.player.setCollideWorldBounds(true);
-    // attach health with onDeath callback
-    Health.attach(this.player, {
-      max: CFG.player.hp,
-      onDeath: () => this.finish()
-    });
 
-    // small, visible damage feedback tint duration
-    this.playerHitTint = 0x9999ff;
-
-    // player anim controller
+    // ── Anim controller (front/back walk/idle)
     this.pAnim = new AnimController(this.player, {
       idle_front: 'p_idle_front',
       idle_back:  'p_idle_back',
@@ -43,72 +45,128 @@ export default class GameScene extends Phaser.Scene {
       walk_back:  'p_walk_back'
     });
 
-    // input
+    // ── Desktop keyboard fallback
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D');
 
-    // collisions
+    // ── Collisions
     this.physics.add.overlap(this.bullets, this.enemies, this.onBulletHitsEnemy, null, this);
+    this.physics.add.overlap(this.player,  this.enemies, this.onEnemyTouchesPlayer, null, this);
 
-    // NEW: enemy → player touch damage
-    this.physics.add.overlap(this.player, this.enemies, this.onEnemyTouchesPlayer, null, this);
-
-    // spawn loop
-    this.wave = 1;
-    this.time.addEvent({ delay: 3000, loop: false, callback: () => this.spawnWave() });
-
-    // camera
+    // ── Camera follow + generous world bounds (so RESIZE + follow stays comfy)
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-
-    // Expand world bounds so ENVELOP doesn't clip movement off-screen
     const w = this.scale.width, h = this.scale.height;
     this.physics.world.setBounds(-w, -h, w*3, h*3);
+
+    // ── Zoom policy config (desktop vs portrait)
+    this._zoomCfg = {
+      BASE_W: 480,           // desktop design width (emulate FIT)
+      BASE_H: 270,           // desktop design height
+      PLAYER_FRAME_H: 24,    // player sprite frame height (world px)
+      TARGET_PLAYER_PX: 20,  // desired player size on mobile (screen px)
+      MIN_WORLD_WIDTH: 240,  // ensure portrait shows at least this much width
+      Z_MIN: 0.75,           // clamp lower bound
+      Z_MAX: 1.0,            // clamp upper bound
+      LERP: 0.15             // smooth factor each frame
+    };
+
+    // ── Targeting + auto-aim config (one source of truth; no duplicates)
+    this._targetCfg = {
+      ENGAGE_RADIUS: 220,          // auto-fire only if enemy within this radius
+      RETARGET_INTERVAL_MS: 250,   // reconsider target every X ms
+      STICKY_BIAS: 0.9             // new target must be ~10% closer to steal lock
+    };
+    this._target = { sprite: null, nextCheckAt: 0, lastDist: Infinity };
+
+    // ── Tap handling: one-shot intent passed from UIScene via events
+    this._tapPending = null; // {x,y} consumed next frame
+    events.on('aim:tap', (pt) => { this._tapPending = pt; });
+
+    // ── Re-apply zoom when viewport changes
+    this.scale.on('resize', () => this._applyZoom(true));
+    this._applyZoom(true);
+
+    // ── Simple enemy spawner (keep your own if you already have one)
+    this.wave = 1;
+    this.time.addEvent({ delay: 1500, loop: true, callback: () => this.spawnWave() });
+  }
+
+  // WHAT: Apply desktop vs mobile (portrait) zoom.
+  // WHY: Desktop emulates FIT; portrait uses "player≈20px + min width" bias.
+  _applyZoom(jump=false){
+    const cam = this.cameras.main;
+    const vw = this.scale.width, vh = this.scale.height;
+
+    let targetZoom;
+    if (isDesktopLike(vw, vh)) {
+      targetZoom = computeDesktopZoom({
+        viewW: vw, viewH: vh,
+        baseW: this._zoomCfg.BASE_W,
+        baseH: this._zoomCfg.BASE_H
+      });
+    } else {
+      targetZoom = computePortraitZoom({
+        viewW: vw, viewH: vh,
+        playerFrameH: this._zoomCfg.PLAYER_FRAME_H,
+        TARGET_PLAYER_PX: this._zoomCfg.TARGET_PLAYER_PX,
+        MIN_WORLD_WIDTH: this._zoomCfg.MIN_WORLD_WIDTH,
+        Z_MIN: this._zoomCfg.Z_MIN,
+        Z_MAX: this._zoomCfg.Z_MAX
+      });
+    }
+
+    if (jump) cam.setZoom(targetZoom);
+    else      lerpZoom(cam, targetZoom, this._zoomCfg.LERP);
   }
 
   update(time, delta){
     if (this.gameOver) return;
 
-    // --- Read shared mobile input ---
-    const shared = this.registry.get('input') || { vector:{x:0,y:0}, autoFire:false, aim:null };
+    // ── Smooth zoom every frame (handles orientation/resize gracefully)
+    this._applyZoom(false);
 
-    // Keyboard vector (desktop support)
+    // ── Read movement + aim state published by UIScene (D-pad + aim layer)
+    const state = this.registry.get('input') || { vector:{x:0,y:0}, aimHeld:false, aim:null };
+
+    // Movement vector: prefer D-pad over keyboard if it has stronger magnitude
     const kx = (this.keys.A?.isDown?-1:0) + (this.keys.D?.isDown?1:0);
     const ky = (this.keys.W?.isDown?-1:0) + (this.keys.S?.isDown?1:0);
     const kv = new Phaser.Math.Vector2(kx, ky);
+    const tv = new Phaser.Math.Vector2(state.vector.x, state.vector.y);
+    const dir = (tv.lengthSq() > kv.lengthSq()) ? tv : kv.normalize();
 
-    // Touch vector
-    const tv = new Phaser.Math.Vector2(shared.vector.x, shared.vector.y);
+    // Apply movement
+    this.player.setVelocity(dir.x * CFG.player.speed, dir.y * CFG.player.speed);
 
-    // Prefer the stronger magnitude
-    const useTouch = tv.lengthSq() > kv.lengthSq();
-    const dir = useTouch ? tv : kv.normalize();
-
-    // Move player
-    const speed = CFG.player.speed;
-    this.player.setVelocity(dir.x * speed, dir.y * speed);
-
-    // ----- Aim selection -----
-    let ang;
-    if (shared.aim) {
-      // If a second finger is down, aim there
-      ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, shared.aim.x, shared.aim.y);
-    } else if (useTouch && dir.lengthSq() > 0.0001) {
-      // No aim touch → aim where you’re moving (good 1-thumb fallback)
-      ang = Math.atan2(dir.y, dir.x);
-    } else {
-      // Desktop or idle touch → use pointer/mouse
-      const p = this.input.activePointer;
-      ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, p.worldX, p.worldY);
-    }
-
-    // Animate (no sprite rotation)
+    // Animate (no sprite rotation — only bullets rotate)
     this.pAnim.updateFromVelocity(this.player.body.velocity.x, this.player.body.velocity.y);
 
-    // ----- Fire rule -----
-    const wantsShoot =
-      shared.autoFire                  // mobile/touch: always auto-fire
-      || this.input.activePointer.isDown; // desktop mouse
+    // ── Aim + fire gate (priority: TAP one-shot → HOLD stream → AUTO fallback)
+    let wantsShoot = false;
+    let ang = 0;
 
+    // 1) TAP = single shot toward the tap point (consumed once)
+    if (this._tapPending) {
+      const pt = this._tapPending;
+      ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, pt.x, pt.y);
+      wantsShoot = true;
+      this._tapPending = null; // consume
+    }
+    // 2) HOLD = continuous stream while finger is down (manual aim has no radius check)
+    else if (state.aimHeld && state.aim) {
+      ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, state.aim.x, state.aim.y);
+      wantsShoot = true;
+    }
+    // 3) AUTO = only if a target exists within radius
+    else {
+      const tgt = this._acquireTarget(time);
+      if (tgt) {
+        ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, tgt.x, tgt.y);
+        wantsShoot = true;
+      }
+    }
+
+    // Fire once per cooldown if allowed
     if (wantsShoot && (this._lastFired ?? 0) < time - CFG.player.fireCooldownMs){
       this._lastFired = time;
 
@@ -119,40 +177,83 @@ export default class GameScene extends Phaser.Scene {
       this.time.delayedCall(CFG.bullet.ttlMs, () => b?.destroy());
     }
 
-    // --- Enemy seek (unchanged) ---
+    // ── Enemy seek + anim (placeholder AI)
     this.enemies.children.iterate(e => {
       if (!e) return;
       const ea = Phaser.Math.Angle.Between(e.x, e.y, this.player.x, this.player.y);
       this.physics.velocityFromRotation(ea, e.speed, e.body.velocity);
       e._anim?.updateFromVelocity(e.body.velocity.x, e.body.velocity.y);
     });
-}
+  }
 
+  // WHAT: Choose closest enemy in radius with a little stickiness.
+  // WHY: Prevent aim flicker when two targets are similar distance.
+  _acquireTarget(nowMs){
+    const { ENGAGE_RADIUS, RETARGET_INTERVAL_MS, STICKY_BIAS } = this._targetCfg;
+
+    // Keep current target until next check window expires
+    if (nowMs < this._target.nextCheckAt && this._target.sprite?.active) {
+      const s = this._target.sprite;
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y);
+      if (d <= ENGAGE_RADIUS) return s;
+    }
+
+    // Find nearest within radius
+    let best = null, bestD = Infinity;
+    this.enemies.children.iterate(e => {
+      if (!e || !e.active) return;
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y);
+      if (d <= ENGAGE_RADIUS && d < bestD) { best = e; bestD = d; }
+    });
+
+    // Stickiness: only switch if significantly closer
+    const cur = this._target.sprite;
+    if (cur && cur.active) {
+      const curD = Phaser.Math.Distance.Between(this.player.x, this.player.y, cur.x, cur.y);
+      const steal = best && (bestD < curD * STICKY_BIAS);
+      if (!best || !steal) {
+        if (curD <= ENGAGE_RADIUS) {
+          this._target.nextCheckAt = nowMs + RETARGET_INTERVAL_MS;
+          this._target.lastDist = curD;
+          return cur;
+        }
+      }
+    }
+
+    // Accept new (or none)
+    this._target.sprite = best || null;
+    this._target.lastDist = bestD;
+    this._target.nextCheckAt = nowMs + RETARGET_INTERVAL_MS;
+    return this._target.sprite;
+  }
+
+  // ── Bullet→Enemy (replace with Health.damage if you’ve wired it)
+  onBulletHitsEnemy(bullet, enemy){
+    bullet.destroy();
+    // If you have Health: Health.damage(enemy, bullet.damage ?? 1, this);
+    enemy.destroy(); // placeholder
+    this.score += 10;
+    events.emit('score:add', 10);
+  }
+
+  // ── Enemy→Player touch (wire your Health/i-frames if available)
+  onEnemyTouchesPlayer(player, enemy){
+    this.cameras.main.shake(50, 0.003);
+    // If Health present: Health.damage(player, enemy.damage ?? 1, this, { iFramesMs: ... });
+  }
+
+  // ── Simple wave spawner (replace with your own if you already have one)
   spawnWave(){
-    const count = 1 + this.wave;
-
-    for (let i = 0; i < count; i++){
+    const count = 2
+    //  + this.wave;
+    for (let i=0;i<count;i++){
       const e = this.enemies.create(
-        Phaser.Math.Between(this.scale.width, this.scale.width + this.scale.width/3),
-        Phaser.Math.Between(this.scale.height, this.scale.height + this.scale.height/3),
+        Phaser.Math.Between(-200, 200) + this.player.x,
+        Phaser.Math.Between(-140, 140) + this.player.y,
         'e_walk_front', 0
       ).setScale(0.6);
+      e.speed = (CFG.enemy?.baseSpeed ?? 40) + this.wave * 2;
 
-      e.speed  = CFG.enemy.baseSpeed + this.wave * 2;
-      e.damage = 1;
-
-      // attach health to enemy; on death: score, shake, destroy
-      Health.attach(e, {
-        max: Math.ceil(CFG.enemy.baseHP * (1 + this.wave*0.2)),
-        onDeath: () => {
-          // this.cameras.main.shake(40, 0.002);
-          this.score += 10;
-          events.emit('score:add', 10);
-          e.destroy();
-        }
-      });
-
-      // enemy anim controller (front-only for now)
       e._anim = new AnimController(e, {
         idle_front: 'e_walk_front',
         idle_back:  'e_walk_front',
@@ -163,51 +264,5 @@ export default class GameScene extends Phaser.Scene {
       e.anims.play('e_walk_front', true);
     }
     this.wave++;
-  }
-
-
-  onBulletHitsEnemy(bullet, enemy){
-    // damage enemy; no i-frames for bugs
-     const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, bullet.x, bullet.y);
-      if (dist < 38) {
-        bullet.destroy();
-        // (death is handled by enemy's onDeath callback inside Health.attach)
-        Health.damage(enemy, bullet.damage ?? 1, this);
-       
-      }
-  }
-
-  // ─── Enemy touches player → damage with i-frames ────────────────────────────
-  onEnemyTouchesPlayer(player, enemy){
-    // Use i-frames to avoid melting the player instantly on overlap
-    const hp = Health.damage(player, enemy.damage ?? 1, this, { iFramesMs: CFG.player.iFramesMs });
-
-    // visual feedback
-    player.setTint(this.playerHitTint);
-    this.cameras.main.shake(60, 0.004);
-    this.time.delayedCall(CFG.player.iFramesMs, () => player.clearTint());
-
-    // optional: trigger enemy attack animation once when close
-    if (!enemy._attacking) {
-      const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, player.x, player.y);
-      if (dist < 38) {
-        enemy._attacking = true;
-        enemy.setVelocity(0, 0);
-        enemy._anim?.playAttack('front', 'e_attack_front');
-        enemy.once('animationcomplete-e_attack_front', () => {
-          enemy._attacking = false;
-          enemy.anims.play('e_walk_front', true);
-        });
-      }
-    }
-
-    // if hp <= 0, Health.onDeath for player will have called finish()
-  }
-
-  finish(){
-    if (this.gameOver) return;
-    this.gameOver = true;
-    this.scene.stop('UI');
-    this.scene.start('GameOver', { score: this.score, wave: this.wave-1, profile: this.profile });
   }
 }
