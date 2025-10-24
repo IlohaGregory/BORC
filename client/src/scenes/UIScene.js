@@ -13,8 +13,8 @@ export default class UIScene extends Phaser.Scene {
     const { width } = this.scale;
 
     // HUD
-    this.nameTxt  = this.add.text(4, 2, this.profile.displayName, { fontFamily:'monospace', fontSize:8, color:'#7ec8e3' });
-    this.scoreTxt = this.add.text(width-4, 2, '0', { fontFamily:'monospace', fontSize:8, color:'#fff' }).setOrigin(1,0);
+    this.nameTxt  = this.add.text(4, 2, this.profile.displayName, { fontFamily:'monospace', fontSize:20, color:'#7ec8e3' });
+    this.scoreTxt = this.add.text(width-4, 2, '0', { fontFamily:'monospace', fontSize:20, color:'#fff' }).setOrigin(1,0);
     events.on('score:add', n => {
       const s = parseInt(this.scoreTxt.text||'0',10) + n;
       this.scoreTxt.setText(String(s));

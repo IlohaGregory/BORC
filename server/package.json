@@ -1,0 +1,18 @@
+{
+  "name": "borc-server",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@colyseus/monitor": "^0.16.7",
+    "@colyseus/schema": "^3.0.60",
+    "body-parser": "^1.20.2",
+    "colyseus": "^0.16.5",
+    "cors": "^2.8.5",
+    "ethers": "^6.0.0",
+    "express": "^4.18.2"
+  }
+}
+

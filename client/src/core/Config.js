@@ -1,4 +1,5 @@
-// Game entities config file
+import NetSync from "../systems/NetSync";
+
 export const CFG = {
   player: {
     speed: 80,             // Movement speed in pixels/sec
@@ -16,4 +17,5 @@ export const CFG = {
     baseHP: 2              // Starting HP; also scales with wave
   }
 };
+
 

@@ -8,6 +8,7 @@ import MenuScene from './scenes/MenuScene.js';
 import GameScene from './scenes/GameScene.js';
 import UIScene from './scenes/UIScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
+import WaitingRoomScene from "./scenes/WaitingRoomScene.js";
 
 // Virtual base size: 320x180 is a classic retro-friendly 16:9.
 const BASE_W = 680, BASE_H = 270;
@@ -24,7 +25,7 @@ const config = {
     default: 'arcade',
     arcade: {
       gravity: { y: 0 },        // Top-down shooter => no gravity
-      debug: true              // Turn on for collision boxes while debugging
+      debug: false             // Turn on for collision boxes while debugging
     }
   },
   scale: {
@@ -33,7 +34,7 @@ const config = {
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
   dom: { createContainer: true },
-  scene: [BootScene, PreloadScene, MenuScene, GameScene, UIScene, GameOverScene],
+  scene: [BootScene, PreloadScene, MenuScene, WaitingRoomScene, GameScene, UIScene, GameOverScene],
 };
 
 new Phaser.Game(config);

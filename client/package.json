@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@coinbase/wallet-sdk": "^4.3.7",
+    "colyseus.js": "^0.16.21",
     "phaser": "^3.80.1",
     "viem": "^2.37.6"
   },
