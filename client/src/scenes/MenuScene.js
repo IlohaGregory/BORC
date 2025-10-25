@@ -40,6 +40,14 @@ export default class MenuScene extends Phaser.Scene {
       try {
         await walletService.init();
         const { address, displayName } = await walletService.connect();
+        const baseName = await walletService.resolveBaseName();
+        if (baseName) {
+          inputName.value = baseName;
+          setMsg(`Welcome, ${baseName}!`);
+        } else {
+          setMsg('No Base Name found; using wallet address.');
+        }
+
 
         if (!inputName.value) inputName.value = displayName || walletService.shortAddress(address);
         btnConnect.textContent = walletService.shortAddress(address);

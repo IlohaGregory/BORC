@@ -4,6 +4,7 @@ import { networkService } from '../services/NetworkService.js';
 import { walletService } from '../services/WalletService.js';
 import { profileService } from '../services/ProfileService.js';
 
+
 export default class WaitingRoomScene extends Phaser.Scene {
   constructor(){ super('WaitingRoom'); }
 

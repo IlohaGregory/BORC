@@ -1,15 +1,16 @@
-//  WalletService — vanilla wallet integration for BORC.
-
 // src/services/WalletService.js
 import { createPublicClient, http } from 'viem';
 import { createCoinbaseWalletSDK } from '@coinbase/wallet-sdk';
+import {getEnsName} from 'viem/ens'
+import { base, baseSepolia} from 'viem/chains'
+
 
 export const CHAINS = {
   BASE_MAINNET: { name:'Base', chainIdDec:8453, chainIdHex:'0x2105', rpcUrl:'https://mainnet.base.org', explorer:'https://basescan.org', currency:{ name:'ETH', symbol:'ETH', decimals:18 } },
   BASE_SEPOLIA: { name:'Base Sepolia', chainIdDec:84532, chainIdHex:'0x14A34', rpcUrl:'https://sepolia.base.org', explorer:'https://sepolia.basescan.org', currency:{ name:'ETH', symbol:'ETH', decimals:18 } }
 };
 
-const ACTIVE = CHAINS.BASE_SEPOLIA;
+const ACTIVE = base;
 
 // Small utility to check “user rejected” errors across wallets
 function isUserRejected(err) {
@@ -51,7 +52,10 @@ class WalletService {
    }
 
 
-    this.client = createPublicClient({ transport: http(ACTIVE.rpcUrl) });
+    this.client = createPublicClient({
+      chain: ACTIVE,
+      transport: http(ACTIVE.rpcUrls.default.http[0]),
+    });
     this._bindProviderEvents();
     this._inited = true;
   }
@@ -140,6 +144,33 @@ getInjectedProvider() {
       return { address: this.address, displayName: this.displayName };
     } finally {
       this._connecting = false;
+    }
+  }
+
+  // get base name
+  async resolveBaseName() {
+    if (location.hostname === "localhost") {
+      console.warn("Skipping BaseName resolution in local mode.");
+      return null;
+    }
+
+    if (!this.address) return null;
+
+    try {
+      // Use Coinbase OnchainKit's Base Name API directly
+      const res = await fetch(`https://api.onchainkit.xyz/api/v1/basenames/address/${this.address}`);
+      const data = await res.json();
+
+      if (data?.primary_name?.name) {
+        this.displayName = data.primary_name.name;
+        return this.displayName;
+      } else {
+        console.warn('No Base Name found for address:', this.address);
+        return null;
+      }
+    } catch (err) {
+      console.warn('BaseName resolve failed:', err);
+      return null;
     }
   }
 
