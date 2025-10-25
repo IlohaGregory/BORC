@@ -99,6 +99,30 @@ export default class WaitingRoomScene extends Phaser.Scene {
     this.refreshTimer = this.time.addEvent({ delay: 300, loop: true, callback: () => this.refreshPanel() });
 
     this.input.keyboard.on('keydown-ESC', () => this.exitLobby());
+
+    // instructions to connect
+    this.add.text(
+      this.scale.width / 2,
+      this.scale.height / 2 + 80,
+      ` How To Connect With Friends
+      NOTE : This is a Proof of Co-op Multiplayer version (no solo plays)), For Solo Plays : https://ilohagregory.github.io/BORC
+    1. Parties must be in the lobby to appear in the list of active players
+    2. Find friends in the list of active players (search by wallet address, Basenames soon)
+    3. Invite another player from the lobby.
+    4. When both players squad up all team members should click ready.
+    5. Leader (inviter) should click "Start Match" button.
+    6. Goodluck Raiders.
+
+    🚀 Built on Base | Multiplayer synced with Colyseus`,
+      {
+        fontFamily: 'monospace',
+        fontSize: 14,
+        color: '#ffffff',
+        align: 'center',
+        wordWrap: { width: this.scale.width * 0.9 },
+      }
+    ).setOrigin(0.5);
+
   }
 
   async joinLobbyAndListen() {
