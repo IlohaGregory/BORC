@@ -147,31 +147,38 @@ getInjectedProvider() {
   }
 
   // get base name
-  async resolveBaseName() {
-    if (location.hostname === "localhost") {
-      console.warn("Skipping BaseName resolution in local mode.");
-      return null;
-    }
-
-    if (!this.address) return null;
-
-    try {
-      // Use Coinbase OnchainKit's Base Name API directly
-      const res = await fetch(`https://api.onchainkit.xyz/api/v1/basenames/address/${this.address}`);
-      const data = await res.json();
-
-      if (data?.primary_name?.name) {
-        this.displayName = data.primary_name.name;
-        return this.displayName;
-      } else {
-        console.warn('No Base Name found for address:', this.address);
-        return null;
-      }
-    } catch (err) {
-      console.warn('BaseName resolve failed:', err);
-      return null;
-    }
+  // inside WalletService class
+async resolveBaseName() {
+  // Skip during localhost dev if you want:
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+    // optional: return null for local dev to avoid contacting upstream
+    console.warn("Skipping BaseName resolution in local mode.");
+    return null;
   }
+
+  if (!this.address) return null;
+
+  try {
+    // Call Vercel proxy on same origin
+    const url = `/api/proxy-basename?address=${encodeURIComponent(this.address)}`;
+    const r = await fetch(url, { credentials: 'same-origin' });
+    if (!r.ok) {
+      console.warn('proxy-basename returned not ok', r.status);
+      return null;
+    }
+    const data = await r.json();
+    const name = data?.primary_name?.name || data?.primary_name || data?.name || null;
+    if (name) {
+      this.displayName = name;
+      return name;
+    }
+    return null;
+  } catch (err) {
+    console.warn('BaseName resolve failed:', err);
+    return null;
+  }
+}
+
 
   // Network ensure with add/switch and graceful 4001 handling
   async ensureNetwork(target) {
