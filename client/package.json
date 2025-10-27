@@ -10,9 +10,10 @@
   },
   "dependencies": {
     "@coinbase/wallet-sdk": "^4.3.7",
+    "@ensdomains/ensjs": "^4.0.2",
     "colyseus.js": "^0.16.21",
     "phaser": "^3.80.1",
-    "viem": "^2.37.6"
+    "viem": "^2.38.4"
   },
   "devDependencies": {
     "vite": "^5.4.0"

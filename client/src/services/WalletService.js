@@ -1,16 +1,15 @@
 // src/services/WalletService.js
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, http,createWalletClient, custom, getContract } from 'viem';
 import { createCoinbaseWalletSDK } from '@coinbase/wallet-sdk';
 import {getEnsName} from 'viem/ens'
 import { base, baseSepolia} from 'viem/chains'
-
 
 export const CHAINS = {
   BASE_MAINNET: { name:'Base', chainIdDec:8453, chainIdHex:'0x2105', rpcUrl:'https://mainnet.base.org', explorer:'https://basescan.org', currency:{ name:'ETH', symbol:'ETH', decimals:18 } },
   BASE_SEPOLIA: { name:'Base Sepolia', chainIdDec:84532, chainIdHex:'0x14A34', rpcUrl:'https://sepolia.base.org', explorer:'https://sepolia.basescan.org', currency:{ name:'ETH', symbol:'ETH', decimals:18 } }
 };
 
-const ACTIVE = base;
+const ACTIVE = baseSepolia;
 
 // Small utility to check “user rejected” errors across wallets
 function isUserRejected(err) {

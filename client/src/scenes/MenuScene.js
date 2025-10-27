@@ -1,87 +1,142 @@
 // src/scenes/MenuScene.js
 import { walletService, CHAINS } from '../services/WalletService.js';
 import { profileService } from '../services/ProfileService.js';
+import contractService from '../services/ContractService.js'; // ✅ Default import
 
 export default class MenuScene extends Phaser.Scene {
-  constructor(){ super('Menu'); }
+  constructor() {
+    super('Menu');
+  }
 
-  create(){
-    const { width } = this.scale;
-    this.add.text(width/2, this.scale.height/3 - 40, 'BORC', { fontFamily:'monospace', fontSize:38, color:'#4d73fdff' }).setOrigin(0.5);
+  create() {
+    const { width, height } = this.scale;
 
+    // --- Title ---
+    this.add.text(width / 2, height / 3 - 40, 'BORC', {
+      fontFamily: 'monospace',
+      fontSize: 38,
+      color: '#4d73fdff'
+    }).setOrigin(0.5);
+
+    // --- UI Panel ---
     const panel = document.createElement('div');
     panel.className = 'panel';
-    this.add.dom(0, this.scale.height/3, panel).setOrigin(0);
+    this.add.dom(0, height / 3, panel).setOrigin(0);
     panel.innerHTML = `
       <div style="display:flex;gap:12px;flex-direction:column;align-items:center;">
         <button id="connect" class="btn">Connect Wallet</button>
-        <input id="name" placeholder="Display name" style="padding:8px;font-family:monospace"/>
-        <div id="msg" style="min-height:18px;color:#aaa;font-family:monospace;font-size:12px;"></div>
-        <button id="play" class="btn">Start</button>
-      </div>`;
+        <input id="name" placeholder="Display name" style="padding:8px;font-family:monospace;display:none;"/>
+        <button id="play" class="btn" disabled>Start</button>
+      </div>
+    `;
 
     const btnConnect = panel.querySelector('#connect');
-    const inputName  = panel.querySelector('#name');
-    const btnPlay    = panel.querySelector('#play');
-    const msg        = panel.querySelector('#msg');
+    const inputName = panel.querySelector('#name');
+    const btnPlay = panel.querySelector('#play');
 
-    const existing = profileService.load();
-    if (existing?.displayName) inputName.value = existing.displayName;
+    // --- Toast Message Element ---
+    const toast = document.createElement('div');
+    Object.assign(toast.style, {
+      position: 'fixed',
+      bottom: '32px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      padding: '10px 16px',
+      borderRadius: '8px',
+      background: '#333',
+      color: '#fff',
+      fontFamily: 'monospace',
+      fontSize: '14px',
+      opacity: '0',
+      transition: 'opacity 0.3s ease',
+      pointerEvents: 'none',
+      zIndex: '1000'
+    });
+    document.body.appendChild(toast);
 
-    let connecting = false;
-    const setMsg = (t, color='#aaa') => { msg.textContent = t; msg.style.color = color; };
+    const showToast = (text, color = '#fff', duration = 2500) => {
+      toast.textContent = text;
+      toast.style.color = color;
+      toast.style.opacity = '1';
+      clearTimeout(this._toastTimeout);
+      this._toastTimeout = setTimeout(() => (toast.style.opacity = '0'), duration);
+    };
 
     btnConnect.onclick = async () => {
-      if (connecting) return;
-      connecting = true;
+      if (btnConnect.disabled) return;
       btnConnect.disabled = true;
-      setMsg('Connecting…');
+      showToast('Connecting to wallet...');
 
       try {
         await walletService.init();
         const { address, displayName } = await walletService.connect();
-        const baseName = await walletService.resolveBaseName();
+
+        console.log('Connected wallet info:', address, displayName);
+
+        // unwrap address safely
+        const addr = typeof address === 'object' ? address.address || address[0] : address;
+        if (!addr || !addr.startsWith('0x')) {
+          showToast('Invalid wallet address returned.', '#ff6a6a');
+          btnConnect.disabled = false;
+          return;
+        }
+
+        // Step 1: Try resolving Base Name
+        const baseName = await walletService.resolveBaseName().catch(() => null);
+        let finalName = baseName || displayName || walletService.shortAddress(addr);
+
         if (baseName) {
-          inputName.value = baseName;
-          setMsg(`Welcome, ${baseName}!`);
+          showToast(`Welcome, ${baseName}!`);
+          inputName.style.display = 'none';
         } else {
-          setMsg('No Base Name found; using wallet address.');
+          showToast('No Base Name found. Choose a display name.');
+          inputName.style.display = 'block';
+          inputName.value = finalName;
         }
 
+        btnConnect.textContent = walletService.shortAddress(addr);
+        btnPlay.disabled = false;
 
-        if (!inputName.value) inputName.value = displayName || walletService.shortAddress(address);
-        btnConnect.textContent = walletService.shortAddress(address);
-        setMsg('Connected.');
-
-        // Prompt user to switch to Base mainnet (non-blocking)
-        try {
-          const ok = await walletService.ensureBaseMainnet();
-          if (ok) setMsg(`Network: ${CHAINS.BASE_MAINNET.name}`);
-          else setMsg(`Network unchanged (you can still play).`);
-        } catch (e) {
-          // ignore network errors for now
-          setMsg('Connected (network check failed).', '#ffb86b');
-        }
       } catch (e) {
-        setMsg(e?.message || 'Connection failed.', '#ff6a6a');
+        console.error(e);
+        showToast(e?.message || 'Connection failed.', '#ff6a6a');
       } finally {
-        connecting = false;
         btnConnect.disabled = false;
       }
     };
 
-    btnPlay.onclick = () => {
-      const profile = {
-        address: walletService.getAddress() || null,
-        displayName: inputName.value?.trim() || walletService.shortAddress() || 'Pilot',
-        lastSeen: Date.now()
-      };
-      profileService.save(profile);
+    btnPlay.onclick = async () => {
+      try {
+        // Get display name from the input (local only)
+        const displayNameInput = document.getElementById('name');
+        const displayName = displayNameInput?.value?.trim() || "Pilot";
 
-      // clean up DOM before changing scenes
-      if (panel && panel.parentNode) panel.remove();
+        profileService.save({ displayName });
+        // Grab wallet + base name if available
+        const baseName = walletService?.baseName || "Anon";
+        const address = walletService?.address || "0x0";
 
-      this.scene.start('WaitingRoom', { profile });
+        console.log("🎮 Starting session with:", { baseName, displayName, address });
+
+        // Construct lightweight local profile
+        const profile = { baseName, displayName, address };
+
+        // Launch the waiting room
+        this.scene.start("WaitingRoom", { profile });
+
+      } catch (err) {
+        console.error("Play flow failed:", err);
+        alert("Failed to start game: " + (err?.message || err));
+      }
     };
+
+    
+  }
+
+  shutdown() {
+    // Clean up toast
+    if (this._toastTimeout) clearTimeout(this._toastTimeout);
+    const toast = document.querySelector('div[style*="position: fixed"][style*="bottom: 32px"]');
+    if (toast) toast.remove();
   }
 }

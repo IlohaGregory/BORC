@@ -142,19 +142,40 @@ export default class WaitingRoomScene extends Phaser.Scene {
 
   refreshPanel() {
     const s = networkService.lobbyState;
-    if (!s) { this.panel.innerHTML = '<div>Waiting for lobby data…</div>'; return; }
+    if (!s) {
+      this.panel.innerHTML = '<div>Waiting for lobby data…</div>';
+      return;
+    }
 
     let html = '';
-    if (networkService._lastLobbyError) { html += `<div style="color:#ff8a8a">Error: ${networkService._lastLobbyError}</div>`; networkService._lastLobbyError = null; }
+    if (networkService._lastLobbyError) {
+      html += `<div style="color:#ff8a8a">Error: ${networkService._lastLobbyError}</div>`;
+      networkService._lastLobbyError = null;
+    }
 
     html += `<div>Connected: ${s.players.length} &nbsp; Queue: ${s.queueSize}</div><hr/>`;
     html += '<div><strong>Players</strong></div>';
+
     s.players.forEach(p => {
-      // p: { sessionId, address, displayName, inSquad, squadId }
-      const shortSid = (p.sessionId || '').slice(0,6);
+      // p: { sessionId, address, baseName, displayName, inSquad, squadId }
+      const shortSid = (p.sessionId || '').slice(0, 6);
+      const shortAddr = p.address
+        ? `${p.address.slice(0, 6)}…${p.address.slice(-4)}`
+        : 'Guest';
+
+      const localProfile = profileService?.load?.() || {};
+      if (!p.displayName && p.address === walletService.address) {
+        p.displayName = localProfile.displayName || '';
+      }
+
+      const playerName =
+        (p.baseName && p.baseName.trim()) || (localProfile.displayName) ||
+        (p.displayName && p.displayName.trim()) ||
+        shortAddr;
+
       html += `<div style="margin:6px 0">`;
-      html += `<strong>${p.displayName || p.address || 'Guest'}</strong> <span style="font-size:10px;color:#999">(${shortSid})</span>`;
-      // only show invite button for other sessions; compare to lobby session id (not current game session)
+      html += `<strong>${playerName}</strong> <span style="font-size:10px;color:#999">(${shortSid})</span>`;
+
       const lobbySess = networkService.lobbyRoom?.sessionId || null;
       if (p.sessionId && p.sessionId !== lobbySess) {
         html += ` <button data-session="${p.sessionId}" class="inviteBtn" style="margin-left:6px">Invite</button>`;
@@ -166,8 +187,9 @@ export default class WaitingRoomScene extends Phaser.Scene {
     s.squads.forEach(sq => {
       html += `<div style="margin:6px 0">Squad ${sq.squadId} - leader: ${sq.leader} (${sq.members.length})<br/>`;
       sq.members.forEach(m => {
-        const ready = (sq.ready.find ? sq.ready.find(r => r[0] === m)?.[1] : false) ? ' (ready)' : '';
-        html += `<span style="font-size:12px">${(m || '').slice(0,6)}${ready}</span> `;
+        const ready = (sq.ready.find ? sq.ready.find(r => r[0] === m)?.[1] : false)
+          ? ' (ready)' : '';
+        html += `<span style="font-size:12px">${(m || '').slice(0, 6)}${ready}</span> `;
       });
       html += `<br/><button data-join="${sq.squadId}" class="joinSquad">Join</button>`;
       if (sq.leader === (networkService.lobbyRoom?.sessionId || networkService.sessionId)) {
@@ -179,11 +201,15 @@ export default class WaitingRoomScene extends Phaser.Scene {
     });
 
     html += '<hr/>';
-    html += `<div style="display:flex;gap:8px"><button id="readyBtn">Ready</button><button id="matchBtn">Start</button><input id="roomInput" placeholder="Join squad id" style="padding:6px;font-family:monospace"/></div>`;
+    html += `<div style="display:flex;gap:8px">
+      <button id="readyBtn">Ready</button>
+      <button id="matchBtn">Start</button>
+      <input id="roomInput" placeholder="Join squad id" style="padding:6px;font-family:monospace"/>
+    </div>`;
 
     this.panel.innerHTML = html;
 
-    // wire player invites
+    // Reconnect buttons
     this.panel.querySelectorAll('.inviteBtn').forEach(btn => {
       btn.onclick = () => {
         const targetSession = btn.dataset.session;
@@ -192,68 +218,30 @@ export default class WaitingRoomScene extends Phaser.Scene {
       };
     });
 
-    // join squad buttons
     this.panel.querySelectorAll('.joinSquad').forEach(btn => {
-      btn.onclick = () => networkService.joinSquad(btn.dataset.join).catch(e => console.error('joinSquad err', e));
+      btn.onclick = () => networkService.joinSquad(btn.dataset.join)
+        .catch(e => console.error('joinSquad err', e));
     });
 
-    // start match (leader only)
     this.panel.querySelectorAll('.startSquad').forEach(btn => {
       btn.onclick = async () => {
-        this.panel.querySelectorAll('.startSquad').forEach(b => { b.disabled = true; b.textContent = 'Starting...'; });
-
-        console.log('[UI] start clicked for squad', btn.dataset.start);
+        this.panel.querySelectorAll('.startSquad').forEach(b => {
+          b.disabled = true;
+          b.textContent = 'Starting...';
+        });
 
         try {
           await networkService.startMatchAsLeader(btn.dataset.start);
         } catch (e) {
           console.error('startMatch error', e);
-          this.panel.querySelectorAll('.startSquad').forEach(b => { b.disabled = false; b.textContent = 'Start Match'; });
+          this.panel.querySelectorAll('.startSquad').forEach(b => {
+            b.disabled = false;
+            b.textContent = 'Start Match';
+          });
           alert('Start failed: ' + (e?.message || e));
         }
       };
     });
-
-    // ready toggle
-    const readyBtn = this.panel.querySelector('#readyBtn');
-    if (readyBtn) readyBtn.onclick = async () => {
-      const my = s.players.find(p => p.sessionId === (networkService.lobbyRoom?.sessionId || networkService.sessionId));
-      if (!my || !my.squadId) { alert('Not in a squad'); return; }
-      const sq = s.squads.find(x => x.squadId === my.squadId);
-      const amReady = sq?.ready?.find ? sq.ready.find(r => r[0] === (networkService.lobbyRoom?.sessionId || networkService.sessionId))?.[1] : false;
-      await networkService.setReady(my.squadId, !amReady).catch(e => console.error('setReady err', e));
-    };
-
-    // matchmaking Start button -> enqueue for 5 minutes
-    const matchBtn = this.panel.querySelector('#matchBtn');
-    if (matchBtn) {
-      matchBtn.onclick = async () => {
-        matchBtn.disabled = true;
-        matchBtn.textContent = 'Searching (5:00)';
-        await networkService.startMatchmaking().catch(e => { console.error('startMatchmaking err', e); matchBtn.disabled = false; matchBtn.textContent = 'Start'; });
-        let remaining = 300;
-        const tick = setInterval(() => {
-          remaining--;
-          matchBtn.textContent = `Searching (${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')})`;
-          if (remaining <= 0) {
-            clearInterval(tick);
-            matchBtn.disabled = false;
-            matchBtn.textContent = 'Start';
-          }
-        }, 1000);
-      };
-    }
-
-    // manual join by squad id input
-    const roomInput = this.panel.querySelector('#roomInput');
-    if (roomInput) {
-      roomInput.onkeydown = (e) => {
-        if (e.key === 'Enter') {
-          const val = roomInput.value.trim();
-          if (val) networkService.joinSquad(val).catch(err => console.error(err));
-        }
-      };
-    }
   }
 
   exitLobby() {
