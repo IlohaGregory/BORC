@@ -4,55 +4,70 @@ import { networkService } from '../services/NetworkService.js';
 import { walletService } from '../services/WalletService.js';
 import { profileService } from '../services/ProfileService.js';
 
-
 export default class WaitingRoomScene extends Phaser.Scene {
   constructor(){ super('WaitingRoom'); }
 
   create() {
     this.cameras.main.setBackgroundColor('#000000');
-    this.add.text(160, 10, 'Waiting Room', { fontFamily:'monospace', fontSize:14 }).setOrigin(0.5, 0);
+    this.add.text(this.scale.width/2, 10, 'Waiting Room', { fontFamily:'monospace', fontSize:16 }).setOrigin(0.5, 0);
 
+    // floating left panel
     this.panel = document.createElement('div');
-    Object.assign(this.panel.style, { position:'absolute', left:'8px', top:'30px', width:'340px', background:'rgba(0,0,0,0.75)', color:'#fff', padding:'8px', fontFamily:'monospace' });
+    Object.assign(this.panel.style, {
+      position:'absolute',
+      left:'8px',
+      top:'36px',
+      width:'360px',
+      background:'rgba(0,0,0,0.82)',
+      color:'#fff',
+      padding:'10px',
+      fontFamily:'monospace',
+      borderRadius:'6px',
+      boxSizing:'border-box'
+    });
     document.body.appendChild(this.panel);
 
-    this.infoBar = this.add.text(10, 160, '', { fontFamily:'monospace', fontSize:10, color:'#aaa' });
+    // info bar (phaser text)
+    this.infoBar = this.add.text(10, 170, '', { fontFamily:'monospace', fontSize:11, color:'#aaa' });
 
-    // Make a small floating invite box element once
+    // invite box (floating)
     this.inviteBox = document.createElement('div');
     Object.assign(this.inviteBox.style, {
       position: 'absolute',
       right: '10px',
       top: '30px',
-      background: 'rgba(20,20,25,0.95)',
+      background: 'rgba(20,20,25,0.98)',
       color: '#fff',
-      padding: '8px',
+      padding: '12px',
       fontFamily: 'monospace',
       display: 'none',
-      zIndex: 9999
+      zIndex: 9999,
+      borderRadius: '8px',
+      maxWidth: '320px'
     });
     document.body.appendChild(this.inviteBox);
 
-    // Register network callbacks BEFORE connecting to avoid missing messages
+    // Register invite handler
     networkService.onInvite = (invite) => {
       // invite: { fromSession, fromAddress, fromName, squadId? }
       console.log('Invite arrived', invite);
+      const fromName = invite.fromName || invite.fromAddress || invite.fromSession;
       this.inviteBox.innerHTML = `
-        <div><strong>Invite from ${invite.fromName || invite.fromAddress || invite.fromSession}</strong></div>
-        <div style="margin-top:6px">
-          <button id="acceptInvite">Accept</button>
-          <button id="declineInvite" style="margin-left:8px">Decline</button>
-        </div>`;
+        <div style="font-size:14px"><strong>🎯 Invite from ${fromName}</strong></div>
+        <div style="margin-top:8px;color:#ddd;font-size:12px">Join ${fromName}'s squad?</div>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button id="acceptInvite">✅ Accept</button>
+          <button id="declineInvite">❌ Decline</button>
+        </div>
+      `;
       this.inviteBox.style.display = 'block';
 
       this.inviteBox.querySelector('#acceptInvite').onclick = async () => {
         try {
-          // Prefer explicit squadId from invite; otherwise send leaderId fallback
           if (invite.squadId) {
-            await networkService.joinSquad(invite.squadId).catch(e => { throw e; });
+            await networkService.joinSquad(invite.squadId);
           } else {
-            // server may support join by leader; some server versions expect leaderId instead
-            await networkService.joinSquad(null, invite.fromSession).catch(e => { throw e; });
+            await networkService.joinSquad(null, invite.fromSession);
           }
         } catch (err) {
           console.error('joinSquad failed', err);
@@ -67,72 +82,57 @@ export default class WaitingRoomScene extends Phaser.Scene {
       };
     };
 
-    // set service-level callbacks BEFORE connecting so we never race with game_ready
+    // game ready callbacks
     networkService.onGameReady = (data) => {
       if (this._joining) return;
       this._joining = true;
       console.log('[UI] onGameReady', data);
-      // small UX: let user know
       alert('Match ready — joining game...');
-
-      // remove/cleanup lobby UI
       if (this.panel) { this.panel.remove(); this.panel = null; }
-
       const profile = (typeof profileService !== 'undefined' && profileService.load) ? profileService.load() : { displayName: 'Pilot' };
-
       this.scene.start('Game', { joinRoomId: data.roomId, profile });
-      // this.scene.launch('UI', { profile });
     };
 
     networkService.onGameReadyError = (err) => {
       console.warn('[UI] joinGame error', err);
       alert('Failed to join game: ' + (err?.message || err));
-      // re-enable UI start buttons so the leader can try again
-      if (this.panel) {
-        this.panel.querySelectorAll('.startSquad').forEach(b => { b.disabled = false; b.textContent = 'Start Match'; });
-      }
+      // re-enable start buttons if present
+      if (this.panel) this.panel.querySelectorAll('button').forEach(b => b.disabled = false);
     };
 
     // Start connecting AFTER callbacks registered
     this.joinLobbyAndListen();
 
-    // Panel refresh loop
-    this.refreshTimer = this.time.addEvent({ delay: 300, loop: true, callback: () => this.refreshPanel() });
+    // refresh loop
+    this.refreshTimer = this.time.addEvent({ delay: 400, loop: true, callback: () => this.refreshPanel() });
 
     this.input.keyboard.on('keydown-ESC', () => this.exitLobby());
 
-    // instructions to connect
+    // helpful instructions below
     this.add.text(
       this.scale.width / 2,
-      this.scale.height / 2 + 80,
-      ` How To Connect With Friends
-      NOTE : This is a Proof of Co-op Multiplayer version (no solo plays)), For Solo Plays : https://ilohagregory.github.io/BORC
-    1. Parties must be in the lobby to appear in the list of active players
-    2. Find friends in the list of active players (search by wallet address, Basenames soon)
-    3. Invite another player from the lobby.
-    4. When both players squad up all team members should click ready.
-    5. Leader (inviter) should click "Start Match" button.
-    6. Goodluck Raiders.
-
-    🚀 Built on Base | Multiplayer synced with Colyseus`,
+      this.scale.height / 2 + 88,
+      `How To Connect With Friends
+      NOTE: This is a proof of multiplayer and Base integration version; For solo play head to https://ilohagregory.github.io/BORC/
+1) look for friends on player list (search by wallet; basenames and display name soon)
+2) Send invites
+3) Wait for invites to be accepted
+4) Squad leader clicks Start, members click Ready (leader auto-ready)
+`,
       {
         fontFamily: 'monospace',
-        fontSize: 14,
-        color: '#ffffff',
+        fontSize: 12,
+        color: '#ddd',
         align: 'center',
         wordWrap: { width: this.scale.width * 0.9 },
       }
     ).setOrigin(0.5);
-
   }
 
   async joinLobbyAndListen() {
     try {
       await networkService.connectToLobby();
-
       console.log('Lobby joined:', { roomId: networkService.lobbyRoom?.roomId, sessionId: networkService.lobbyRoom?.sessionId });
-
-      // initial UI refresh
       this.refreshPanel();
     } catch (e) {
       console.error('lobby join failed', e);
@@ -147,7 +147,37 @@ export default class WaitingRoomScene extends Phaser.Scene {
       return;
     }
 
-    let html = '';
+    // 🔹 Cache for auto-ready leader (prevent spamming setReady)
+    if (!this._autoReadyFlag) this._autoReadyFlag = {};
+
+    // --- Helper for consistent player naming ---
+    const getDisplayName = (player) => {
+      if (!player) return 'Unknown';
+      const shortAddr = player.address
+        ? `${player.address.slice(0, 6)}…${player.address.slice(-4)}`
+        : 'Guest';
+
+      const myAddr = walletService.getAddress?.()?.toLowerCase();
+      const isMe = myAddr && player.address && player.address.toLowerCase() === myAddr;
+      const localProfile = profileService?.load?.() || {};
+      const localName = isMe ? localProfile.displayName : null;
+
+      return (
+        (player.baseName && player.baseName.trim()) ||
+        (localName && localName.trim()) ||
+        (player.displayName && player.displayName.trim()) ||
+        shortAddr
+      );
+    };
+
+    const mySessionId = networkService.lobbyRoom?.sessionId || networkService.sessionId;
+    const me = s.players.find(p => p.sessionId === mySessionId);
+    const myName = getDisplayName(me);
+
+    let html = `<div style="margin-bottom:8px; color:#90ee90;">
+      👤 You are <strong>${myName}</strong>
+    </div>`;
+
     if (networkService._lastLobbyError) {
       html += `<div style="color:#ff8a8a">Error: ${networkService._lastLobbyError}</div>`;
       networkService._lastLobbyError = null;
@@ -156,60 +186,77 @@ export default class WaitingRoomScene extends Phaser.Scene {
     html += `<div>Connected: ${s.players.length} &nbsp; Queue: ${s.queueSize}</div><hr/>`;
     html += '<div><strong>Players</strong></div>';
 
+    // --- Player list ---
     s.players.forEach(p => {
-      // p: { sessionId, address, baseName, displayName, inSquad, squadId }
       const shortSid = (p.sessionId || '').slice(0, 6);
-      const shortAddr = p.address
-        ? `${p.address.slice(0, 6)}…${p.address.slice(-4)}`
-        : 'Guest';
-
-      const localProfile = profileService?.load?.() || {};
-      if (!p.displayName && p.address === walletService.address) {
-        p.displayName = localProfile.displayName || '';
-      }
-
-      const playerName =
-        (p.baseName && p.baseName.trim()) || (localProfile.displayName) ||
-        (p.displayName && p.displayName.trim()) ||
-        shortAddr;
-
+      const playerName = getDisplayName(p);
       html += `<div style="margin:6px 0">`;
       html += `<strong>${playerName}</strong> <span style="font-size:10px;color:#999">(${shortSid})</span>`;
-
-      const lobbySess = networkService.lobbyRoom?.sessionId || null;
-      if (p.sessionId && p.sessionId !== lobbySess) {
+      if (p.sessionId && p.sessionId !== mySessionId) {
         html += ` <button data-session="${p.sessionId}" class="inviteBtn" style="margin-left:6px">Invite</button>`;
       }
       html += `</div>`;
     });
 
+    // --- Squads section ---
     html += '<hr/><div><strong>Squads</strong></div>';
     s.squads.forEach(sq => {
-      html += `<div style="margin:6px 0">Squad ${sq.squadId} - leader: ${sq.leader} (${sq.members.length})<br/>`;
-      sq.members.forEach(m => {
-        const ready = (sq.ready.find ? sq.ready.find(r => r[0] === m)?.[1] : false)
-          ? ' (ready)' : '';
-        html += `<span style="font-size:12px">${(m || '').slice(0, 6)}${ready}</span> `;
-      });
-      html += `<br/><button data-join="${sq.squadId}" class="joinSquad">Join</button>`;
-      if (sq.leader === (networkService.lobbyRoom?.sessionId || networkService.sessionId)) {
-        html += `<button data-start="${sq.squadId}" class="startSquad" style="margin-left:6px">Start Match</button>`;
-      } else {
-        html += `<button disabled style="margin-left:6px">Waiting</button>`;
+      const isLeader = sq.leader === mySessionId;
+
+      //  Auto-set leader ready once per squad
+      if (isLeader && !this._autoReadyFlag[sq.squadId]) {
+        this._autoReadyFlag[sq.squadId] = true;
+        networkService
+          .setReady(sq.squadId, true)
+          .catch(err => console.warn('auto-ready leader failed', err));
       }
+
+      const leaderPlayer = s.players.find(p => p.sessionId === sq.leader);
+      html += `<div style="margin:6px 0; padding:6px; background:rgba(255,255,255,0.05); border-radius:4px;">
+        <div>🎯 Squad ${sq.squadId} - Leader: <strong>${getDisplayName(leaderPlayer)}</strong> (${sq.members.length})</div>
+        <div style="margin-top:4px">`;
+
+      sq.members.forEach(m => {
+        const member = s.players.find(p => p.sessionId === m);
+        const ready = (sq.ready.find ? sq.ready.find(r => r[0] === m)?.[1] : false);
+        const name = getDisplayName(member);
+        html += `<span style="font-size:12px">${name}${ready ? ' ✅' : ' <span style="color:#ff7070">(not ready)</span>'}</span><br/>`;
+      });
+
+      html += `</div>`;
+
+      // Show join button only for other squads
+      const isInThisSquad = sq.members.includes(mySessionId);
+      if (!isInThisSquad) {
+        html += `<button data-join="${sq.squadId}" class="joinSquad">Join</button>`;
+      }
+
       html += `</div>`;
     });
 
-    html += '<hr/>';
-    html += `<div style="display:flex;gap:8px">
-      <button id="readyBtn">Ready</button>
-      <button id="matchBtn">Start</button>
-      <input id="roomInput" placeholder="Join squad id" style="padding:6px;font-family:monospace"/>
-    </div>`;
+    // --- Controls ---
+    html += '<hr/><div style="display:flex;gap:8px">';
+    const mySquad = s.squads.find(sq => sq.members.includes(mySessionId));
+    const isLeader = mySquad?.leader === mySessionId;
+
+    // Ready button only for non-leaders in a squad
+    if (mySquad && !isLeader) {
+      html += `<button id="readyBtn">Ready</button>`;
+    }
+
+    // Unified Start button:
+    // - Solo player → matchmaking
+    // - Squad leader → start squad match
+    if (!mySquad || isLeader) {
+      const color = isLeader ? '#3ae374' : '#fff';
+      html += `<button id="matchBtn" style="background:${color};padding:6px 10px;border:none;border-radius:4px;">Start</button>`;
+    }
+
+    html += '</div>';
 
     this.panel.innerHTML = html;
 
-    // Reconnect buttons
+    // --- Wire up buttons ---
     this.panel.querySelectorAll('.inviteBtn').forEach(btn => {
       btn.onclick = () => {
         const targetSession = btn.dataset.session;
@@ -223,29 +270,42 @@ export default class WaitingRoomScene extends Phaser.Scene {
         .catch(e => console.error('joinSquad err', e));
     });
 
-    this.panel.querySelectorAll('.startSquad').forEach(btn => {
-      btn.onclick = async () => {
-        this.panel.querySelectorAll('.startSquad').forEach(b => {
-          b.disabled = true;
-          b.textContent = 'Starting...';
-        });
-
+    // Unified Start button
+    const matchBtn = this.panel.querySelector('#matchBtn');
+    if (matchBtn) {
+      matchBtn.onclick = async () => {
+        matchBtn.disabled = true;
+        matchBtn.textContent = 'Starting...';
         try {
-          await networkService.startMatchAsLeader(btn.dataset.start);
+          if (mySquad && isLeader) {
+            await networkService.startMatchAsLeader(mySquad.squadId);
+          } else {
+            await networkService.startMatchmaking();
+          }
         } catch (e) {
-          console.error('startMatch error', e);
-          this.panel.querySelectorAll('.startSquad').forEach(b => {
-            b.disabled = false;
-            b.textContent = 'Start Match';
-          });
+          console.error('Start failed', e);
           alert('Start failed: ' + (e?.message || e));
+        } finally {
+          matchBtn.disabled = false;
+          matchBtn.textContent = 'Start';
         }
       };
-    });
+    }
+
+    // Ready button
+    const readyBtn = this.panel.querySelector('#readyBtn');
+    if (readyBtn) {
+      readyBtn.onclick = async () => {
+        if (!mySquad) return alert('Not in a squad');
+        const sq = s.squads.find(x => x.squadId === mySquad.squadId);
+        const amReady = sq?.ready?.find ? sq.ready.find(r => r[0] === mySessionId)?.[1] : false;
+        await networkService.setReady(mySquad.squadId, !amReady).catch(e => console.error('setReady err', e));
+      };
+    }
   }
 
+
   exitLobby() {
-    // fire and forget leave
     networkService.leaveLobby().catch(e => console.warn('leaveLobby err', e));
     if (this.panel) { this.panel.remove(); this.panel = null; }
     this.scene.start('Menu');

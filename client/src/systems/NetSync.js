@@ -157,7 +157,6 @@ export default class NetSync {
       const latest = this.snapshots[this.snapshots.length - 1];
       if (!latest) return callback({ players: {}, enemies: {}, bullets: {}, snapshotMeta: { playersIds: [] } });
       const myKey = this.networkService.playerKey || this.networkService.sessionId;
-      console.log('[NetSync] fallback snapshot keys:', Object.keys(latest.players), 'myKey:', myKey);
       return callback({
         players: latest.players,
         enemies: latest.enemies,
