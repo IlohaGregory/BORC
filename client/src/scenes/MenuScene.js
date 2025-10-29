@@ -88,6 +88,7 @@ export default class MenuScene extends Phaser.Scene {
         if (baseName) {
           showToast(`Welcome, ${baseName}!`);
           inputName.style.display = 'none';
+          inputName.value = baseName;
         } else {
           showToast('No Base Name found. Choose a display name.');
           inputName.style.display = 'block';
@@ -110,10 +111,10 @@ export default class MenuScene extends Phaser.Scene {
         // Get display name from the input (local only)
         const displayNameInput = document.getElementById('name');
         const displayName = displayNameInput?.value?.trim() || "Pilot";
+        const baseName = await walletService.resolveBaseName().catch(() => null);
 
-        profileService.save({ displayName });
+        profileService.save({ displayName, baseName });
         // Grab wallet + base name if available
-        const baseName = walletService?.baseName || "Anon";
         const address = walletService?.address || "0x0";
 
         console.log("🎮 Starting session with:", { baseName, displayName, address });

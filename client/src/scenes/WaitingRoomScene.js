@@ -7,6 +7,12 @@ import { profileService } from '../services/ProfileService.js';
 export default class WaitingRoomScene extends Phaser.Scene {
   constructor(){ super('WaitingRoom'); }
 
+  init(data) {
+    if (data?.profile) {
+      profileService.save(data.profile);
+    }
+  }
+
   create() {
     this.cameras.main.setBackgroundColor('#000000');
     this.add.text(this.scale.width/2, 10, 'Waiting Room', { fontFamily:'monospace', fontSize:16 }).setOrigin(0.5, 0);
@@ -153,18 +159,24 @@ export default class WaitingRoomScene extends Phaser.Scene {
     // --- Helper for consistent player naming ---
     const getDisplayName = (player) => {
       if (!player) return 'Unknown';
+
       const shortAddr = player.address
         ? `${player.address.slice(0, 6)}…${player.address.slice(-4)}`
         : 'Guest';
 
       const myAddr = walletService.getAddress?.()?.toLowerCase();
       const isMe = myAddr && player.address && player.address.toLowerCase() === myAddr;
-      const localProfile = profileService?.load?.() || {};
-      const localName = isMe ? localProfile.displayName : null;
 
+      // For YOU: prefer local baseName > displayName
+      if (isMe) {
+        const localProfile = profileService.load();
+        const localName = localProfile?.baseName || localProfile?.displayName;
+        if (localName) return localName;
+      }
+
+      // For others: baseName (from server) > displayName > shortAddr
       return (
         (player.baseName && player.baseName.trim()) ||
-        (localName && localName.trim()) ||
         (player.displayName && player.displayName.trim()) ||
         shortAddr
       );
@@ -203,7 +215,10 @@ export default class WaitingRoomScene extends Phaser.Scene {
     s.squads.forEach(sq => {
       const isLeader = sq.leader === mySessionId;
 
-      //  Auto-set leader ready once per squad
+      // === NEW: convert serialized ready array to Map ===
+      const readyMap = new Map(sq.ready);   // <-- ADD THIS LINE
+
+      // Auto-set leader ready once per squad (client-side safety net)
       if (isLeader && !this._autoReadyFlag[sq.squadId]) {
         this._autoReadyFlag[sq.squadId] = true;
         networkService
@@ -213,14 +228,15 @@ export default class WaitingRoomScene extends Phaser.Scene {
 
       const leaderPlayer = s.players.find(p => p.sessionId === sq.leader);
       html += `<div style="margin:6px 0; padding:6px; background:rgba(255,255,255,0.05); border-radius:4px;">
-        <div>🎯 Squad ${sq.squadId} - Leader: <strong>${getDisplayName(leaderPlayer)}</strong> (${sq.members.length})</div>
+        <div>Target Squad ${sq.squadId} - Leader: <strong>${getDisplayName(leaderPlayer)}</strong> (${sq.members.length})</div>
         <div style="margin-top:4px">`;
 
       sq.members.forEach(m => {
         const member = s.players.find(p => p.sessionId === m);
-        const ready = (sq.ready.find ? sq.ready.find(r => r[0] === m)?.[1] : false);
+        // === NEW: use readyMap instead of sq.ready.find ===
+        const ready = readyMap.get(m) ?? false;   // <-- CHANGE THIS LINE
         const name = getDisplayName(member);
-        html += `<span style="font-size:12px">${name}${ready ? ' ✅' : ' <span style="color:#ff7070">(not ready)</span>'}</span><br/>`;
+        html += `<span style="font-size:12px">${name}${ready ? ' Ready' : ' <span style="color:#ff7070">(not ready)</span>'}</span><br/>`;
       });
 
       html += `</div>`;
@@ -241,12 +257,14 @@ export default class WaitingRoomScene extends Phaser.Scene {
 
     // Ready button only for non-leaders in a squad
     if (mySquad && !isLeader) {
-      html += `<button id="readyBtn">Ready</button>`;
+      const readyMap = new Map(mySquad.ready);
+      const amReady = readyMap.get(mySessionId) ?? false;
+      html += `<button id="readyBtn">${amReady ? 'Unready' : 'Ready'}</button>`;
     }
 
-    // Unified Start button:
+    // Unfied Start button:
     // - Solo player → matchmaking
-    // - Squad leader → start squad match
+    // - Squad leader → start squad matchi
     if (!mySquad || isLeader) {
       const color = isLeader ? '#3ae374' : '#fff';
       html += `<button id="matchBtn" style="background:${color};padding:6px 10px;border:none;border-radius:4px;">Start</button>`;

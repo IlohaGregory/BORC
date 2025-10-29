@@ -1,5 +1,6 @@
 import { Client } from "colyseus.js";
 import { walletService } from './WalletService.js';
+import { profileService } from './ProfileService.js';
 
 export class NetworkService {
   constructor() {
@@ -27,7 +28,6 @@ export class NetworkService {
 
   // ---------------- Lobby ----------------
   async connectToLobby() {
-    // join or create the shared lobby
     this.lobbyRoom = await this.colyseusClient.joinOrCreate('borc_lobby');
     this.sessionId = this.lobbyRoom.sessionId;
 
@@ -68,32 +68,44 @@ export class NetworkService {
       console.warn('[Network] lobby error', payload);
     });
 
-    // register our profile with the lobby (do not block if wallet missing — send null)
-    const address = (walletService && walletService.getAddress) ? walletService.getAddress() : null;
-    const displayName = (walletService && walletService.getDisplayName)
-      ? (walletService.getDisplayName() || (address ? `${address.slice(0,6)}…${address.slice(-4)}` : 'Guest'))
-      : (address ? `${address.slice(0,6)}…${address.slice(-4)}` : 'Guest');
+    // Load display name and baseName from profileService (localStorage)
+    const profile = profileService.load() || {};
+    let displayName = profile.displayName;
+
+    // Fallbacks for displayName
+    if (!displayName && walletService?.getDisplayName) {
+      displayName = walletService.getDisplayName();
+    }
+    if (!displayName && address) {
+      displayName = `${address.slice(0,6)}…${address.slice(-4)}`;
+    }
+    displayName = displayName || 'Guest';
+
+    // Load or fallback-fetch baseName
+    let baseName = profile.baseName;
+    const address = walletService?.getAddress?.() || null;
+    if (!baseName && walletService?.address) {
+      baseName = await walletService.resolveBaseName().catch(() => null);
+    }
 
     try {
-      await this.registerLobby(address, displayName);
+      await this.registerLobby(address?.toLowerCase(), displayName, baseName);
     } catch (e) {
       console.warn('[Network] registerLobby failed', e);
-      // still continue — lobby join itself succeeded
     }
 
     console.info('[Network] joined lobby', { roomId: this.lobbyRoom.roomId, sessionId: this.sessionId });
     return this.lobbyRoom;
   }
 
-  async registerLobby(address, displayName) {
+  async registerLobby(address, displayName, baseName) {
     if (!this.lobbyRoom) throw new Error('not-in-lobby');
     try {
-      // colyseus Room.send is synchronous; use try/catch for safety
-      this.lobbyRoom.send('register', { address: address ? address.toLowerCase() : null, displayName });
+      this.lobbyRoom.send('register', { address, displayName, baseName });
     } catch (e) {
       throw e;
     }
-  }
+}
 
   async sendInvite({ toSessionId = null, toAddress = null } = {}) {
     if (!this.lobbyRoom) throw new Error('not-in-lobby');

@@ -6,19 +6,19 @@ import {
   http,
   getContract,
 } from "viem";
-import { baseSepolia } from "viem/chains";
+import { base } from "viem/chains";  // Switched to Base Mainnet
 import PlayerRegistry from "../contracts/PlayerRegistry.json";
 
-const CONTRACT_ADDRESS = "0xFA54748e06cE78bF3bB534d517765805aDd8B5ec";
+const CONTRACT_ADDRESS = "0xdCc826fA1573f0fc30AF8d7cd79402Aa506cB850";  // TODO: Replace with your deployed Mainnet address
 
 const ABI = PlayerRegistry.abi || PlayerRegistry;
 
 class ContractService {
   constructor() {
-    const rpcUrl = "https://base-sepolia-rpc.publicnode.com";
+    const rpcUrl = "https://mainnet.base.org";  // Public Mainnet RPC; swap to private (e.g., Alchemy/Infura) if needed
 
     this.chain = {
-      ...baseSepolia,
+      ...base,
       rpcUrls: { default: { http: [rpcUrl] } },
     };
 
@@ -32,7 +32,7 @@ class ContractService {
     this.account = null;
   }
 
-  /** 🔹 Connect wallet (MetaMask / Coinbase / injected provider) */
+  /** Connect wallet (MetaMask / Coinbase / injected provider) */
   async connectWallet() {
     if (!window.ethereum) {
       throw new Error("No wallet provider found. Please install MetaMask or Coinbase Wallet.");
@@ -53,7 +53,7 @@ class ContractService {
     return address;
   }
 
-  /** 🔹 Helper: get contract instance for any client */
+  /** Helper: get contract instance for any client */
   getContract(client) {
     return getContract({
       address: CONTRACT_ADDRESS,
@@ -62,7 +62,7 @@ class ContractService {
     });
   }
 
-  /** 🔹 Check if a display name is available */
+  /** Check if a display name is available */
   async isNameAvailable(name) {
     try {
       const contract = this.getContract(this.publicClient);
@@ -75,7 +75,7 @@ class ContractService {
     }
   }
 
-  /** 🔹 Fetch player info by wallet address */
+  /** Fetch player info by wallet address */
   async getPlayer(address) {
     try {
       if (!address || typeof address !== "string") {
@@ -92,7 +92,7 @@ class ContractService {
     }
   }
 
-  /** 🔹 Register player (requires connected wallet) */
+  /** Register player (requires connected wallet) */
   async registerPlayer(baseName, displayName) {
     try {
       if (!this.walletClient || !this.account) {
@@ -113,7 +113,7 @@ class ContractService {
     }
   }
 
-  /** 🔹 Change player display name (requires connected wallet) */
+  /** Change player display name (requires connected wallet) */
   async changeDisplayName(newDisplayName) {
     try {
       if (!this.walletClient || !this.account) {

@@ -242,7 +242,6 @@ export default class NetSync {
     }
 
     const myKey = this.networkService.playerKey || this.networkService.sessionId;
-    console.log('[NetSync] interpolated snapshot keys:', playerIds, 'myKey:', myKey);
 
     callback({
       players: outPlayers,
