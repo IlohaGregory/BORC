@@ -43,19 +43,16 @@ export class NetworkService {
     });
 
     // When server signals a created game room for us:
-    this.lobbyRoom.onMessage('game_ready', (data) => {
+    this.lobbyRoom.onMessage('game_ready', async (data) => {
       console.debug('[Network] game_ready', data);
       this._lastGameReady = data;
-      // auto-join the game room (non-blocking). data may include playerKey
-      this.joinGameRoomById(data.roomId)
-        .then(room => {
-          console.info('[Network] joined game room', data.roomId);
-          if (this.onGameReady) try { this.onGameReady(data); } catch (_) {}
-        })
-        .catch(err => {
-          console.error('[Network] failed to join game room', err);
-          if (this.onGameReadyError) try { this.onGameReadyError(err); } catch (_) {}
-        });
+
+      try {
+        await this.joinGameWithReservation(data.reservation);
+        if (this.onGameReady) this.onGameReady(data);
+      } catch (err) {
+        if (this.onGameReadyError) this.onGameReadyError(err);
+      }
     });
 
     this.lobbyRoom.onMessage('matchmaking_status', (m) => {
@@ -148,87 +145,54 @@ export class NetworkService {
   }
 
   // ---------------- Game room join ----------------
-  async joinGameRoomById(roomId) {
-    if (this.gameRoom && this.gameRoom.roomId === roomId) {
-      console.debug('[Network] already in game room', roomId);
-      return this.gameRoom;
-    }
+  // Replace joinGameRoomById with:
+  async joinGameWithReservation(reservation) {
+    if (this.gameRoom) return this.gameRoom;
 
-    // default: dev-friendly skipAuth unless explicitly set to "false"
-    const skipAuth = (import.meta.env.VITE_SKIP_GAME_AUTH === 'false') ? false : true;
-
-    // ensure we leave lobby first to avoid duplicate sessions
+    // Leave lobby
     if (this.lobbyRoom) {
-      try { await this.leaveLobby(); } catch (e) { console.warn('[Network] leaveLobby failed', e); }
+      await this.leaveLobby();
       this.lobbyRoom = null;
     }
 
-    // prepare stable playerId (wallet address preferred)
-    const addrRaw = (typeof walletService !== 'undefined' && walletService.getAddress) ? walletService.getAddress() : null;
-    const addr = addrRaw ? addrRaw.toLowerCase() : null;
-    const playerId = addr || null;
+    const addr = walletService?.getAddress?.()?.toLowerCase();
+    const skipAuth = import.meta.env.VITE_SKIP_GAME_AUTH === 'true';
 
-    if (skipAuth) {
-      this.gameRoom = await this.colyseusClient.joinById(roomId, { playerId });
-      this.sessionId = this.gameRoom.sessionId;
+    try {
+      if (skipAuth) {
+        this.gameRoom = await this.colyseusClient.consumeSeatReservation(reservation);
+      } else {
+        // Get nonce
+        const base = import.meta.env.VITE_LOBBY_HTTP || 'http://localhost:2567';
+        const r = await fetch(`${base}/nonce/${addr}`);
+        if (!r.ok) throw new Error('nonce failed');
+        const { nonce } = await r.json();
 
-      // ensure consistent lowercase player key
-      this.playerKey = (playerId || this.sessionId);
-      if (this.playerKey && typeof this.playerKey === 'string') {
-        this.playerKey = this.playerKey.toLowerCase();
+        // Sign
+        const signature = await walletService.provider.request({
+          method: 'personal_sign',
+          params: [nonce, addr]
+        });
+
+        // Attach auth to reservation
+        reservation.options = {
+          ...(reservation.options || {}),
+          address: addr,
+          signature,
+          nonce,
+        };
+
+        this.gameRoom = await this.colyseusClient.consumeSeatReservation(reservation);
       }
 
+      this.sessionId = this.gameRoom.sessionId;
+      this.playerKey = addr;
       this._attachGameRoomHandlers();
       return this.gameRoom;
-
+    } catch (err) {
+      console.error('Reservation join failed:', err);
+      throw err;
     }
-
-    // production path: fetch nonce and sign
-    const address = addr ? addr.toLowerCase() : this.sessionId;
-    if (!address) throw new Error('wallet-not-connected');
-
-    const base = import.meta.env.VITE_LOBBY_HTTP || 'http://localhost:2567';
-    const r = await fetch(`${base}/nonce/${address}`);
-    if (!r.ok) throw new Error('nonce-failed');
-    const { nonce } = await r.json();
-
-    const signature = await walletService.provider.request({
-      method: 'personal_sign',
-      params: [nonce, address]
-    });
-
-    // join with retry/backoff
-    const maxAttempts = 7;
-    let attempt = 0;
-    while (attempt < maxAttempts) {
-      try {
-        this.gameRoom = await this.colyseusClient.joinById(roomId, { 
-          playerId: address, 
-          address, 
-          signature, 
-          nonce 
-        });
-        this.sessionId = this.gameRoom.sessionId;
-
-        // ensure consistent lowercase player key
-        this.playerKey = (playerId || this.sessionId);
-        if (this.playerKey && typeof this.playerKey === 'string') {
-          this.playerKey = this.playerKey.toLowerCase();
-        }
-        this._attachGameRoomHandlers();
-        return this.gameRoom;
-
-      } catch (e) {
-        attempt++;
-        const isNotFound = e?.name === 'MatchMakeError' && /not found/i.test(e.message);
-        if (isNotFound && attempt < maxAttempts) {
-          await new Promise(r => setTimeout(r, 150 * attempt));
-          continue;
-        }
-        throw e;
-      }
-    }
-    throw new Error('join-failed-after-retries');
   }
 
   _attachGameRoomHandlers() {

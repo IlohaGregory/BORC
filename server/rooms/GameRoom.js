@@ -132,6 +132,20 @@ export class GameRoom extends Room {
     this.state.players.set(playerKey, p);
   }
 
+  async onAuth(client, options, request) {
+    const playerId = options?.playerId || client.auth?.address;
+    if (!playerId) throw new Error('No playerId');
+
+    const normalized = playerId.toLowerCase();
+
+    // Validate against allowedAddresses from onCreate
+    if (this.allowedAddresses && !this.allowedAddresses.includes(normalized)) {
+      throw new Error('Unauthorized: Not in squad');
+    }
+
+    return { address: normalized };
+  }
+
   onLeave(client, consented) {
     try {
       const pk = this.sessionToPlayerKey[client.sessionId];

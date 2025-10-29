@@ -174,61 +174,73 @@ export class LobbyRoom extends Room {
 
       const sq = this.squads.get(sId);
 
-      // Only leader can start
-      if (sq.leader !== sess) {
-        client.send('error', { message: 'Only the squad leader can start' });
+      // Only leader + all ready + not already starting
+      if (sq.leader !== sess || this.pendingMatches?.has(sId)) {
+        client.send('error', { message: 'Only leader can start once' });
         return;
       }
-
-      // Need at least 2 players
       if (sq.members.size < 2) {
-        client.send('error', { message: 'Need at least 2 players to start' });
+        client.send('error', { message: 'Need 2+ players' });
         return;
       }
-
-      // All members must be ready
       for (const m of sq.members) {
         if (!sq.ready.get(m)) {
-          client.send('error', { message: 'All members must be ready' });
+          client.send('error', { message: 'All must be ready' });
           return;
         }
       }
 
+      // Mark as pending to prevent double-start
+      if (!this.pendingMatches) this.pendingMatches = new Map();
+      this.pendingMatches.set(sId, {});
+
       try {
+        // Extract addresses for onJoin validation
         const allowedAddresses = Array.from(sq.members)
           .map(sid => this.players[sid]?.address)
-          .filter(Boolean);
+          .filter(Boolean)
+          .map(a => a.toLowerCase());
 
-        const roomInfo = await matchMaker.createRoom('borc_room', { allowedAddresses });
-        const roomId = roomInfo?.roomId || roomInfo?.id;
+        // Create LOCKED room (no one else can join)
+        const room = await matchMaker.createRoom('borc_room', {
+          locked: true,
+          maxClients: 3,
+          allowedAddresses,
+        });
 
-        if (!roomId) throw new Error('Failed to get roomId');
+        // Wait a moment for room to be fully registered (Render cold start safety)
+        await new Promise(r => setTimeout(r, 800));
 
-        await new Promise(r => setTimeout(r, 120)); // stability delay
-
-        // Notify all squad members
+        // Reserve a seat for EACH player (atomic, guaranteed)
+        const reservations = new Map();
         for (const sid of sq.members) {
-          const target = this.clients.find(c => c.sessionId === sid);
-          const msg = {
-            roomId,
-            squadId: sId,
-            leader: sq.leader,
-            playerKey: this.players[sid]?.address || null
-          };
-          if (target) {
-            target.send('game_ready', msg);
+          const addr = this.players[sid]?.address?.toLowerCase() || null;
+          const reservation = await matchMaker.reserveSeatFor(room, {
+            playerId: addr,
+            // Optional: pass extra data
+          });
+          reservations.set(sid, reservation);
+        }
+
+        // Send unique reservation to each client
+        for (const sid of sq.members) {
+          const targetClient = Array.from(this.clients).find(c => c.sessionId === sid);
+          if (targetClient) {
+            targetClient.send('game_ready', {
+              reservation: reservations.get(sid),
+              squadId: sId,
+            });
           }
         }
 
-        // Clean up squad
-        for (const sid of sq.members) {
-          this._setPlayerSquad(sid, null);
-        }
-        this.squads.delete(sId);
+        // Auto-cleanup
+        setTimeout(() => this.pendingMatches.delete(sId), 30000);
+
         this._broadcastLobby();
       } catch (e) {
         console.error('[Lobby] start_match failed:', e);
-        client.send('error', { message: 'Failed to create game room', detail: e.message });
+        client.send('error', { message: 'Failed to start game', detail: e.message });
+        this.pendingMatches.delete(sId);
       }
     });
 
