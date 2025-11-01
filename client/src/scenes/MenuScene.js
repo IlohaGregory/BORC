@@ -1,7 +1,7 @@
 // src/scenes/MenuScene.js
 import { walletService, CHAINS } from '../services/WalletService.js';
 import { profileService } from '../services/ProfileService.js';
-import contractService from '../services/ContractService.js'; // ✅ Default import
+import contractService from '../services/ContractService.js';
 
 export default class MenuScene extends Phaser.Scene {
   constructor() {
@@ -107,10 +107,17 @@ export default class MenuScene extends Phaser.Scene {
     };
 
     btnPlay.onclick = async () => {
+      if (btnPlay.disabled) return;
+      btnPlay.disabled = true;
+      showToast('Starting session...');
       try {
         // Get display name from the input (local only)
         const displayNameInput = document.getElementById('name');
-        const displayName = displayNameInput?.value?.trim() || "Pilot";
+        const displayName = displayNameInput?.value?.trim() || walletService.shortAddress() || "Pilot";
+        if (displayName.length < 3) {
+          showToast('Name too short', '#ff6a6a');
+          return;
+        }
         const baseName = await walletService.resolveBaseName().catch(() => null);
 
         profileService.save({ displayName, baseName });
@@ -127,7 +134,9 @@ export default class MenuScene extends Phaser.Scene {
 
       } catch (err) {
         console.error("Play flow failed:", err);
-        alert("Failed to start game: " + (err?.message || err));
+        showToast("Failed to start: " + (err?.message || err), '#ff6a6a');
+      } finally {
+        btnPlay.disabled = false;
       }
     };
 

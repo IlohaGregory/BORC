@@ -16,6 +16,7 @@ export class NetworkService {
     this._lastMatchmaking = null;
     this._lastGameReady = null;
     this._inputSeq = 0;
+    this._inputBuffer = []; // For offline buffering
 
     // callbacks UI can set
     this.onInvite = null;
@@ -65,6 +66,12 @@ export class NetworkService {
       console.warn('[Network] lobby error', payload);
     });
 
+    // Auto-reconnect on error
+    this.lobbyRoom.onError((code, message) => {
+      console.warn('[Network] Lobby error, retrying...', { code, message });
+      setTimeout(() => this.connectToLobby(), 5000);
+    });
+
     // Load display name and baseName from profileService (localStorage)
     const profile = profileService.load() || {};
     let displayName = profile.displayName;
@@ -102,7 +109,7 @@ export class NetworkService {
     } catch (e) {
       throw e;
     }
-}
+  }
 
   async sendInvite({ toSessionId = null, toAddress = null } = {}) {
     if (!this.lobbyRoom) throw new Error('not-in-lobby');
@@ -145,7 +152,6 @@ export class NetworkService {
   }
 
   // ---------------- Game room join ----------------
-  // Replace joinGameRoomById with:
   async joinGameWithReservation(reservation) {
     if (this.gameRoom) return this.gameRoom;
 
@@ -188,6 +194,11 @@ export class NetworkService {
       this.sessionId = this.gameRoom.sessionId;
       this.playerKey = addr;
       this._attachGameRoomHandlers();
+
+      // Resend buffered inputs on connect
+      this._inputBuffer.forEach(input => this.gameRoom.send('input', input));
+      this._inputBuffer = [];
+
       return this.gameRoom;
     } catch (err) {
       console.error('Reservation join failed:', err);
@@ -207,6 +218,7 @@ export class NetworkService {
   async joinRoom(roomId = null) {
     if (roomId) return this.joinGameRoomById(roomId);
     if (this.gameRoom) return this.gameRoom;
+
     if (this._lastGameReady?.roomId) return this.joinGameRoomById(this._lastGameReady.roomId);
     throw new Error('no-room-to-join');
   }
@@ -214,18 +226,19 @@ export class NetworkService {
   sendInput(input) {
     try {
       if (!this.gameRoom) {
-        console.warn('[Network] sendInput skipped — not in game room');
+        console.warn('[Network] sendInput buffered — not in game room');
+        this._inputBuffer.push(input); // Buffer for reconnect
         return;
       }
-        input.seq = (this._inputSeq = (this._inputSeq || 0) + 1);
+      input.seq = (this._inputSeq = (this._inputSeq || 0) + 1);
 
-        // ensure lowercase playerKey is always attached
-        if (!input.playerKey && this.playerKey) {
-          input.playerKey = this.playerKey.toLowerCase();
-        }
-        console.debug('[Network] sending input', input);
+      // ensure lowercase playerKey is always attached
+      if (!input.playerKey && this.playerKey) {
+        input.playerKey = this.playerKey.toLowerCase();
+      }
+      console.debug('[Network] sending input', input);
 
-        this.gameRoom.send('input', input);
+      this.gameRoom.send('input', input);
 
     } catch (e) {
       console.error('[Network] sendInput error', e);
@@ -233,7 +246,7 @@ export class NetworkService {
   }
 
   async leaveLobby() {
-    if (this.lobbyRoom) {
+     if (this.lobbyRoom) {
       try {
         await this.lobbyRoom.leave();
       } catch (e) {

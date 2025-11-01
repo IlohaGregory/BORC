@@ -1,12 +1,13 @@
 // src/services/WalletService.js
 import { 
   createPublicClient,
-   http,
-   ContractFunctionZeroDataError,
-   toCoinType,
-   encodePacked,
-   keccak256,
-   namehash
+  http,
+  ContractFunctionZeroDataError,
+  toCoinType,
+  encodePacked,
+  keccak256,
+  namehash,
+  bytesToHex
 } from 'viem';
 import { createCoinbaseWalletSDK } from '@coinbase/wallet-sdk';
 import { getEnsName } from 'viem/ens';
@@ -73,6 +74,10 @@ class WalletService {
       if (this.address && (!this.displayName || this.displayName.startsWith('0x'))) {
         this.displayName = this.shortAddress();
       }
+      // Clear cache on account change
+      if (this.address) {
+        localStorage.removeItem(`basename_${this.address.toLowerCase()}`);
+      }
     });
     this.provider.on?.('disconnect', () => { this.address = null; });
   }
@@ -118,6 +123,7 @@ class WalletService {
         this.address = accounts?.[0] || null;
         if (this.address) {
           this.displayName = this.shortAddress();
+          await this.ensureBaseMainnet(); // Ensure chain after connect
           return { address: this.address, displayName: this.displayName };
         }
       } catch (e) {
@@ -140,6 +146,7 @@ class WalletService {
       if (pre2?.length) {
         this.address = pre2[0];
         this.displayName = this.shortAddress();
+        await this.ensureBaseMainnet();
         return { address: this.address, displayName: this.displayName };
       }
 
@@ -147,15 +154,19 @@ class WalletService {
       const accounts2 = await this.provider.request({ method: 'eth_requestAccounts' });
       this.address = accounts2?.[0] || null;
       this.displayName = this.shortAddress();
+      await this.ensureBaseMainnet();
       return { address: this.address, displayName: this.displayName };
     } finally {
       this._connecting = false;
     }
   }
 
-  // Resolve Base name
+  // Resolve Base name with cache
   async resolveBaseName() {
     if (!this.address) return null;
+    const cacheKey = `basename_${this.address.toLowerCase()}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) return JSON.parse(cached);
     try {
       // Create a Base Mainnet public client (uses public RPC, fine for reads)
       const baseClient = createPublicClient({
@@ -163,21 +174,32 @@ class WalletService {
         transport: http('https://mainnet.base.org'),
       });
 
-      // Compute address node: keccak256(encodePacked(string(addr_hex)))
       const addrHex = this.address.slice(2).toLowerCase();
-      const addressNode = keccak256(encodePacked(['string'], [addrHex]));
-
-      // Compute slipped coinType (0x80000000 | chainId) as hex string (lowercase for normalization)
       const coinType = Number((BigInt(0x80000000) | BigInt(base.id)) & BigInt(0xFFFFFFFF));
       const coinTypeHex = coinType.toString(16).toLowerCase();
 
-      // Base reverse node: namehash('<coinTypeHex>.reverse')
-      const baseReverseNode = namehash(`${coinTypeHex}.reverse`);
+      // DNS-encode: <len><label> for each, end with 0x00
+      const labels = [addrHex, coinTypeHex, 'reverse'];
+      const dnsParts = [];
+      labels.forEach(label => {
+        const buf = new Uint8Array(label.length + 1);
+        buf[0] = label.length;
+        for (let i = 0; i < label.length; i++) {
+          buf[i + 1] = label.charCodeAt(i);
+        }
+        dnsParts.push(buf);
+      });
+      dnsParts.push(new Uint8Array([0])); // Terminator
 
-      // Address reverse node: keccak256(encodePacked(bytes32(baseReverseNode), bytes32(addressNode)))
-      const addressReverseNode = keccak256(encodePacked(['bytes32', 'bytes32'], [baseReverseNode, addressNode]));
+      const dnsBytes = new Uint8Array(dnsParts.reduce((acc, buf) => acc + buf.length, 0));
+      let offset = 0;
+      dnsParts.forEach(buf => {
+        dnsBytes.set(buf, offset);
+        offset += buf.length;
+      });
 
-      // Call the 'name' function on the L2 Resolver contract
+      const dnsHex = bytesToHex(dnsBytes);
+
       const name = await baseClient.readContract({
         address: '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD',
         abi: [{
@@ -188,12 +210,13 @@ class WalletService {
           "type": "function"
         }],
         functionName: 'name',
-        args: [addressReverseNode],
+        args: [dnsHex],
       });
 
       // Validate Basename; return null if empty or invalid
       if (name && name.endsWith('.base.eth')) {
         this.displayName = name;
+        localStorage.setItem(cacheKey, JSON.stringify(name));
         return name;
       }
       return null;

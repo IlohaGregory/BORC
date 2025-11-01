@@ -15,6 +15,9 @@ export default class GameScene extends Phaser.Scene {
     this._zoomCfg = { BASE_W:480, BASE_H:270, PLAYER_FRAME_H:24, TARGET_PLAYER_PX:20, MIN_WORLD_WIDTH:240, Z_MIN:0.75, Z_MAX:1.0, LERP:0.12 };
     this.localPlayerKey = null;
     this.latestState = null;
+    this.otherPlayersPool = null;
+    this.enemyPool = null;
+    this.bulletPool = null;
   }
 
   init(data) {
@@ -46,6 +49,11 @@ export default class GameScene extends Phaser.Scene {
     this._applyZoom(true);
     this.scale.on('resize', ()=> this._applyZoom(true));
 
+    // Create pools
+    this.otherPlayersPool = this.add.group({ classType: Phaser.GameObjects.Sprite, maxSize: 10 });
+    this.enemyPool = this.add.group({ classType: Phaser.GameObjects.Sprite, maxSize: 50 });
+    this.bulletPool = this.add.group({ classType: Phaser.GameObjects.Sprite, maxSize: 100 });
+
     try {
       await networkService.joinRoom(this.joinRoomId);
     } catch (e) {
@@ -57,6 +65,9 @@ export default class GameScene extends Phaser.Scene {
 
     this.netSync = new NetSync(networkService, this, { interpMs: 200, predStrength: 0.0 });
     await this.netSync.start();
+
+    // Throttle input sending
+    this.time.addEvent({ delay: 33, callback: this._updateLocalInputRegistry, loop: true }); // ~30Hz
 
     this._lastRenderAt = Date.now();
     this.scene.launch('UI', { profile: this.profile });
@@ -76,7 +87,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    this._updateLocalInputRegistry();
+    if (this.pAnim && this.player?.body) this.pAnim.updateFromVelocity(this.player.body.velocity.x, this.player.body.velocity.y);
 
     if (this.netSync) {
       this.netSync.renderInterpolated(({ players = {}, enemies = {}, bullets = {}, snapshotMeta = {} }) => {
@@ -90,25 +101,27 @@ export default class GameScene extends Phaser.Scene {
           const p = players[id] || {};
 
           if (id === localKey) {
-          const blend = 0.3;
-          if (this.player) {
-            if (typeof p.x === 'number' && typeof p.y === 'number') {
-              // Blend position slightly toward authoritative
-              this.player.x = Phaser.Math.Linear(this.player.x, p.x, blend);
-              this.player.y = Phaser.Math.Linear(this.player.y, p.y, blend);
-              if (this.scoreText) this.scoreText.setText(`Score: ${Math.floor(p.score||0)}`);
+            const blend = 0.3;
+            if (this.player) {
+              if (typeof p.x === 'number' && typeof p.y === 'number') {
+                // Blend position slightly toward authoritative
+                this.player.x = Phaser.Math.Linear(this.player.x, p.x, blend);
+                this.player.y = Phaser.Math.Linear(this.player.y, p.y, blend);
+                if (this.scoreText) this.scoreText.setText(`Score: ${Math.floor(p.score||0)}`);
+              }
             }
+            continue;
           }
-          continue;
-        }
-
 
           let ent = this.otherPlayers[id];
           if (!ent) {
-            const spr = this.add.sprite(p.x || 0, p.y || 0, 'player').setDepth(1).setOrigin(0.5).setScale(1);
-            const anim = new AnimController(spr, { idle_front:'p_idle_front', idle_back:'p_idle_back', walk_front:'p_walk_front', walk_back:'p_walk_back' });
-            ent = { sprite: spr, anim, lastPos: { x: p.x || 0, y: p.y || 0, t: Date.now() } };
-            this.otherPlayers[id] = ent;
+            const spr = this.otherPlayersPool.get(p.x || 0, p.y || 0);
+            if (spr) {
+              spr.setTexture('player').setDepth(1).setOrigin(0.5).setScale(1).setActive(true).setVisible(true);
+              const anim = new AnimController(spr, { idle_front:'p_idle_front', idle_back:'p_idle_back', walk_front:'p_walk_front', walk_back:'p_walk_back' });
+              ent = { sprite: spr, anim, lastPos: { x: p.x || 0, y: p.y || 0, t: Date.now() } };
+              this.otherPlayers[id] = ent;
+            }
           } else {
             const now = Date.now();
             const dt = Math.max(1, now - (ent.lastPos.t || now));
@@ -118,6 +131,9 @@ export default class GameScene extends Phaser.Scene {
             if (typeof p.x === 'number' && typeof p.y === 'number') {
               ent.sprite.x = Phaser.Math.Linear(ent.sprite.x, p.x, 0.6);
               ent.sprite.y = Phaser.Math.Linear(ent.sprite.y, p.y, 0.6);
+              // Predict forward
+              ent.sprite.x += vx * (delta / 1000);
+              ent.sprite.y += vy * (delta / 1000);
             }
 
             // update anim based on estimated velocity
@@ -127,7 +143,6 @@ export default class GameScene extends Phaser.Scene {
             } else {
               ent.anim.updateFromVelocity(0, 0); // idle
             }
-
 
             ent.lastPos.x = (typeof p.x === 'number') ? p.x : ent.lastPos.x;
             ent.lastPos.y = (typeof p.y === 'number') ? p.y : ent.lastPos.y;
@@ -139,8 +154,11 @@ export default class GameScene extends Phaser.Scene {
           const e = enemies[id] || {};
           let s = this.enemySprites[id];
           if (!s) {
-            s = this.add.sprite(e.x || 0, e.y || 0, 'e_walk_front').setScale(0.7).setDepth(1).setOrigin(0.5);
-            this.enemySprites[id] = s;
+            s = this.enemyPool.get(e.x || 0, e.y || 0);
+            if (s) {
+              s.setTexture('e_walk_front').setScale(0.7).setDepth(1).setOrigin(0.5).setActive(true).setVisible(true);
+              this.enemySprites[id] = s;
+            }
           } else if (typeof e.x === 'number' && typeof e.y === 'number') {
             s.x = e.x; s.y = e.y;
           }
@@ -150,20 +168,36 @@ export default class GameScene extends Phaser.Scene {
           const b = bullets[id] || {};
           let s = this.bulletSprites[id];
           if (!s) {
-            s = this.add.sprite(b.x || 0, b.y || 0, 'bullet').setScale(0.5).setDepth(2).setOrigin(0.5);
-            this.bulletSprites[id] = s;
+            s = this.bulletPool.get(b.x || 0, b.y || 0);
+            if (s) {
+              s.setTexture('bullet').setScale(0.5).setDepth(2).setOrigin(0.5).setActive(true).setVisible(true);
+              this.bulletSprites[id] = s;
+            }
           } else if (typeof b.x === 'number' && typeof b.y === 'number') {
             s.x = b.x; s.y = b.y;
           }
         }
 
-        for (const id in this.otherPlayers) if (!players[id]) { try{ this.otherPlayers[id].sprite.destroy(); }catch{} delete this.otherPlayers[id]; }
-        for (const id in this.enemySprites) if (!enemies[id]) { try{ this.enemySprites[id].destroy(); }catch{} delete this.enemySprites[id]; }
-        for (const id in this.bulletSprites) if (!bullets[id]) { try{ this.bulletSprites[id].destroy(); }catch{} delete this.bulletSprites[id]; }
+        // Recycle missing entities
+        for (const id in this.otherPlayers) if (!players[id]) { 
+          const ent = this.otherPlayers[id];
+          if (ent) {
+            this.otherPlayersPool.killAndHide(ent.sprite);
+            delete this.otherPlayers[id]; 
+          }
+        }
+        for (const id in this.enemySprites) if (!enemies[id]) { 
+          const s = this.enemySprites[id];
+          if (s) this.enemyPool.killAndHide(s);
+          delete this.enemySprites[id]; 
+        }
+        for (const id in this.bulletSprites) if (!bullets[id]) { 
+          const s = this.bulletSprites[id];
+          if (s) this.bulletPool.killAndHide(s);
+          delete this.bulletSprites[id]; 
+        }
       });
     }
-
-    if (this.pAnim && this.player?.body) this.pAnim.updateFromVelocity(this.player.body.velocity.x, this.player.body.velocity.y);
   }
 
   _updateLocalInputRegistry() {
@@ -209,8 +243,11 @@ export default class GameScene extends Phaser.Scene {
 
   shutdown() {
     this.netSync?.stop();
-    for (const k in this.otherPlayers) { try{ this.otherPlayers[k].sprite.destroy(); }catch{} }
-    for (const k in this.enemySprites) { try{ this.enemySprites[k].destroy(); }catch{} }
-    for (const k in this.bulletSprites) { try{ this.bulletSprites[k].destroy(); }catch{} }
+    this.otherPlayersPool?.clear(true);
+    this.enemyPool?.clear(true);
+    this.bulletPool?.clear(true);
+    this.otherPlayers = {};
+    this.enemySprites = {};
+    this.bulletSprites = {};
   }
 }

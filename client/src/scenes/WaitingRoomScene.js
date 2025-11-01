@@ -67,6 +67,8 @@ export default class WaitingRoomScene extends Phaser.Scene {
         </div>
       `;
       this.inviteBox.style.display = 'block';
+      // Auto-dismiss after 30s
+      setTimeout(() => this.inviteBox.style.display = 'none', 60000);
 
       this.inviteBox.querySelector('#acceptInvite').onclick = async () => {
         try {
@@ -110,7 +112,6 @@ export default class WaitingRoomScene extends Phaser.Scene {
     this.joinLobbyAndListen();
 
     // refresh loop
-    this.refreshTimer = this.time.addEvent({ delay: 400, loop: true, callback: () => this.refreshPanel() });
 
     this.input.keyboard.on('keydown-ESC', () => this.exitLobby());
 
@@ -140,6 +141,7 @@ export default class WaitingRoomScene extends Phaser.Scene {
       await networkService.connectToLobby();
       console.log('Lobby joined:', { roomId: networkService.lobbyRoom?.roomId, sessionId: networkService.lobbyRoom?.sessionId });
       this.refreshPanel();
+      networkService.lobbyRoom.onMessage('lobby_update', () => this.refreshPanel());
     } catch (e) {
       console.error('lobby join failed', e);
       if (this.panel) this.panel.innerText = 'Lobby join failed: ' + (e.message || e);
@@ -245,6 +247,8 @@ export default class WaitingRoomScene extends Phaser.Scene {
       const isInThisSquad = sq.members.includes(mySessionId);
       if (!isInThisSquad) {
         html += `<button data-join="${sq.squadId}" class="joinSquad">Join</button>`;
+      } else {
+        html += `<button data-leave="${sq.squadId}" class="leaveSquad">Leave</button>`;
       }
 
       html += `</div>`;
@@ -287,6 +291,11 @@ export default class WaitingRoomScene extends Phaser.Scene {
       btn.onclick = () => networkService.joinSquad(btn.dataset.join)
         .catch(e => console.error('joinSquad err', e));
     });
+    // leave squad
+    this.panel.querySelectorAll('.leaveSquad').forEach(btn => {
+      btn.onclick = () => networkService.leaveSquad(btn.dataset.leave)
+        .catch(e => console.error('leaveSquad err', e));
+    });
 
     // Unified Start button
     const matchBtn = this.panel.querySelector('#matchBtn');
@@ -298,14 +307,12 @@ export default class WaitingRoomScene extends Phaser.Scene {
           if (mySquad && isLeader) {
             await networkService.startMatchAsLeader(mySquad.squadId);
           } else {
+            alert('Starting without a squad - entering matchmaking or solo mode.');
             await networkService.startMatchmaking();
           }
         } catch (e) {
           console.error('Start failed', e);
           alert('Start failed: ' + (e?.message || e));
-        } finally {
-          matchBtn.disabled = false;
-          matchBtn.textContent = 'Start';
         }
       };
     }
@@ -332,7 +339,6 @@ export default class WaitingRoomScene extends Phaser.Scene {
   shutdown() {
     if (this.panel) { this.panel.remove(); this.panel = null; }
     if (this.inviteBox) { this.inviteBox.remove(); this.inviteBox = null; }
-    this.refreshTimer?.destroy();
     networkService.onGameReady = null;
     networkService.onGameReadyError = null;
     networkService.onInvite = null;

@@ -7,10 +7,10 @@ const MATCH_CHECK_INTERVAL_MS = 1000;
 
 export class LobbyRoom extends Room {
   onCreate(options) {
-    this.players = {};         // sessionId => { address, displayName, inSquad, squadId }
-    this.squads = new Map();   // squadId => { leader, members: Set, ready: Map<sessionId, boolean> }
-    this.addressIndex = new Map(); // address (lowercase) => sessionId
-    this.matchmakingQueue = []; // { sessionId, ts }
+    this.players = {};         
+    this.squads = new Map();   
+    this.addressIndex = new Map();
+    this.matchmakingQueue = [];
 
     this.matchmakingInterval = setInterval(() => this._processMatchQueue(), MATCH_CHECK_INTERVAL_MS);
 
@@ -123,7 +123,7 @@ export class LobbyRoom extends Room {
       if (sq.leader === sess) {
         const next = sq.members.values().next().value;
         sq.leader = next || null;
-        if (next) sq.ready.set(next, true); // new leader auto-ready
+        if (next) sq.ready.set(next, true);
       }
 
       // Delete empty squad
@@ -179,8 +179,8 @@ export class LobbyRoom extends Room {
         client.send('error', { message: 'Only leader can start once' });
         return;
       }
-      if (sq.members.size < 2) {
-        client.send('error', { message: 'Need 2+ players' });
+      if (sq.members.size < 1) {
+        client.send('error', { message: 'Need at least 1 player' });
         return;
       }
       for (const m of sq.members) {
@@ -202,9 +202,10 @@ export class LobbyRoom extends Room {
           .map(a => a.toLowerCase());
 
         // Create LOCKED room (no one else can join)
+        const maxClients = sq.members.size >= 3 ? 3 : sq.members.size;
         const room = await matchMaker.createRoom('borc_room', {
           locked: true,
-          maxClients: 3,
+          maxClients,
           allowedAddresses,
         });
 
@@ -233,7 +234,11 @@ export class LobbyRoom extends Room {
           }
         }
 
-        // Auto-cleanup
+        // Clean up squad after successful start
+        this.squads.delete(sId);
+        this.pendingMatches.delete(sId);
+
+        // Auto-cleanup pending if not joined (e.g., 30s)
         setTimeout(() => this.pendingMatches.delete(sId), 30000);
 
         this._broadcastLobby();
@@ -244,7 +249,7 @@ export class LobbyRoom extends Room {
       }
     });
 
-    // === MATCHMAKING QUEUE ===
+    // MATCHMAKING QUEUE 
     this.onMessage('start_matchmaking', (client) => {
       const sess = client.sessionId;
       this.matchmakingQueue = this.matchmakingQueue.filter(q => q.sessionId !== sess);
@@ -292,6 +297,9 @@ export class LobbyRoom extends Room {
         if (sq.members.size === 0) this.squads.delete(sId);
       }
     }
+
+    // Clean pending if in squad
+    if (info?.squadId) this.pendingMatches?.delete(info.squadId);
 
     // Remove from queue
     this.matchmakingQueue = this.matchmakingQueue.filter(q => q.sessionId !== sess);
@@ -352,6 +360,41 @@ export class LobbyRoom extends Room {
       }
     }
 
+    // Solo fallback for remaining single in queue
+    if (this.matchmakingQueue.length === 1) {
+      const solo = this.matchmakingQueue.shift();
+      if (now - solo.ts > MATCH_TIMEOUT_MS / 2) {  // Half timeout for solo
+        // Create solo squad and room
+        const sId = this._createSquad();
+        const sq = this.squads.get(sId);
+        sq.leader = solo.sessionId;
+        sq.members.add(solo.sessionId);
+        sq.ready.set(solo.sessionId, true);
+
+        this._setPlayerSquad(solo.sessionId, sId);
+
+        const addresses = [this.players[solo.sessionId]?.address].filter(Boolean);
+        try {
+          const roomInfo = await matchMaker.createRoom('borc_room', { 
+            allowedAddresses: addresses,
+            maxClients: 1,  // Solo lock
+            locked: true
+          });
+          const roomId = roomInfo?.roomId || roomInfo?.id;
+          await new Promise(r => setTimeout(r, 120));
+          const target = this.clients.find(c => c.sessionId === solo.sessionId);
+          if (target) target.send('game_ready', { roomId });
+        } catch (e) {
+          console.error('[Lobby] solo matchmaking createRoom failed:', e);
+          const target = this.clients.find(c => c.sessionId === solo.sessionId);
+          if (target) target.send('error', { message: 'Solo matchmaking failed' });
+        }
+      } else {
+        // Re-add if not timed out
+        this.matchmakingQueue.push(solo);
+      }
+    }
+
     this._broadcastLobby();
   }
 
@@ -361,7 +404,7 @@ export class LobbyRoom extends Room {
       sessionId,
       address: p.address,
       displayName: p.displayName,
-      baseName: p.baseName,  // New: Include in broadcast
+      baseName: p.baseName,  
       inSquad: p.inSquad,
       squadId: p.squadId
     }));
