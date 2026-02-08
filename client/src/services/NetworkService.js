@@ -3,7 +3,9 @@ import { walletService } from './WalletService.js';
 
 export class NetworkService {
   constructor() {
-    this.colyseusClient = new Client(import.meta.env.VITE_COLYSEUS_WS || 'ws://localhost:2567');
+    const baseUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:2567';
+    const wsUrl = baseUrl.replace(/^http/, 'ws');
+    this.colyseusClient = new Client(wsUrl);
     this.gameRoom = null;
     this.gameState = null;
     this.sessionId = null;
@@ -27,7 +29,7 @@ export class NetworkService {
         this.gameRoom = await this.colyseusClient.consumeSeatReservation(reservation);
       } else {
         // Get nonce
-        const base = import.meta.env.VITE_LOBBY_HTTP || 'http://localhost:2567';
+        const base = import.meta.env.VITE_SERVER_URL || 'http://localhost:2567';
         const r = await fetch(`${base}/nonce/${addr}`);
         if (!r.ok) throw new Error('nonce failed');
         const { nonce } = await r.json();

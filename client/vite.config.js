@@ -1,13 +1,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  server: {
-    proxy: {
-      '/api': {
-        target: 'https://borc-flame.vercel.app', 
-        changeOrigin: true,
-        secure: true,
-      }
-    }
-  }
+  // Proxy removed - client connects directly to server
+  // For production: VITE_SERVER_URL points to Render deployment
+  // For local dev: Set VITE_SERVER_URL=http://localhost:2567
 })

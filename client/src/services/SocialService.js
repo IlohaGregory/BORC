@@ -1,4 +1,4 @@
-const REST_BASE = import.meta.env.VITE_LOBBY_HTTP || 'http://localhost:2567';
+const REST_BASE = import.meta.env.VITE_SERVER_URL || 'http://localhost:2567';
 
 // Derive WS URL from REST base
 function wsBase() {
