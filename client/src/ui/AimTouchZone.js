@@ -60,9 +60,21 @@ export default class AimTouchZone {
     this.zone.on('pointerup', finish);
     this.zone.on('pointerupoutside', finish);
 
-    scene.scale.on('resize', (s) => {
+    this._resizeHandler = (s) => {
       this.zone.setPosition(s.width/2, s.height/2).setSize(s.width, s.height);
-    });
+    };
+    scene.scale.on('resize', this._resizeHandler);
+  }
+
+  destroy() {
+    if (this._resizeHandler) {
+      this.scene.scale.off('resize', this._resizeHandler);
+      this._resizeHandler = null;
+    }
+    if (this.zone) {
+      this.zone.destroy();
+      this.zone = null;
+    }
   }
 
   _update(p) {

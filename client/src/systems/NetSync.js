@@ -1,72 +1,118 @@
+// NetSync.js
+// Handles state synchronization and interpolation for multiplayer
+
 export default class NetSync {
   constructor(networkService, scene, opts = {}) {
     this.networkService = networkService;
     this.scene = scene;
 
-    // interpolation delay: increase for smoother playback; you can lower if you want fresher
-    this.INTERP_MS = opts.interpMs ?? 180; // default 180ms (tweakable)
-    this.INPUT_HZ = opts.inputHz ?? 15;
-    this.inputInterval = Math.round(1000 / this.INPUT_HZ);
-    this._inputTimer = null;
-    this._inputSeq = 0;
+    // interpolation delay: increase for smoother playback
+    this.INTERP_MS = opts.interpMs ?? 180;
 
     this.snapshots = [];
     this.maxSnapshots = opts.maxSnapshots ?? 60;
-
-    // modest local prediction by default so players feel immediate
-    this.predStrength = (typeof opts.predStrength === 'number') ? opts.predStrength : 0.45;
+    this._latestState = null;
 
     this._onState = null;
   }
 
+  getLatestState() {
+    return this._latestState;
+  }
+
   async start() {
     this._onState = (s) => {
-      const snap = { t: Date.now(), tick: s.tick || 0, players: {}, enemies: {}, bullets: {} };
+      this._latestState = s;
+
+      const snap = {
+        t: Date.now(),
+        tick: s.tick || 0,
+        players: {},
+        enemies: {},
+        bullets: {},
+        projectiles: {},
+        nests: {},
+        objectives: {},
+        mission: {}
+      };
+
+      // Helper to convert MapSchema or plain object
+      const toPlain = (collection) => {
+        if (!collection) return {};
+        if (typeof collection.toJSON === 'function') return collection.toJSON();
+        return { ...collection };
+      };
+
       // Players
-      if (s.players && typeof s.players.toJSON === 'function') {
-        const plainPlayers = s.players.toJSON();
-        for (const id in plainPlayers) {
-          const p = plainPlayers[id];
-          snap.players[id] = { x: p.x, y: p.y, hp: p.hp, alive: p.alive, score: p.score, id };
-        }
-      } else {
-        for (const [id, p] of Object.entries(s.players || {})) {
-          snap.players[id] = { x: p.x, y: p.y, hp: p.hp, alive: p.alive, score: p.score, id };
-        }
+      const plainPlayers = toPlain(s.players);
+      for (const id in plainPlayers) {
+        const p = plainPlayers[id];
+        snap.players[id] = {
+          x: p.x, y: p.y, hp: p.hp, alive: p.alive, score: p.score, id,
+          carrying: p.carrying, targetPriority: p.targetPriority, focusTargetId: p.focusTargetId
+        };
       }
 
       // Enemies
-      if (s.enemies && typeof s.enemies.toJSON === 'function') {
-        const plainEnemies = s.enemies.toJSON();
-        for (const id in plainEnemies) {
-          const e = plainEnemies[id];
-          snap.enemies[id] = { x: e.x, y: e.y, hp: e.hp, alive: e.alive, id };
-        }
-      } else {
-        for (const [id, e] of Object.entries(s.enemies || {})) {
-          snap.enemies[id] = { x: e.x, y: e.y, hp: e.hp, alive: e.alive, id };
-        }
+      const plainEnemies = toPlain(s.enemies);
+      for (const id in plainEnemies) {
+        const e = plainEnemies[id];
+        snap.enemies[id] = {
+          x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, alive: e.alive, id,
+          type: e.type, state: e.state, burrowed: e.burrowed
+        };
       }
 
       // Bullets
-      if (s.bullets && typeof s.bullets.toJSON === 'function') {
-        const plainBullets = s.bullets.toJSON();
-        for (const id in plainBullets) {
-          const b = plainBullets[id];
-          snap.bullets[id] = { x: b.x, y: b.y, vx: b.vx, vy: b.vy, owner: b.owner, id };
-        }
-      } else {
-        for (const [id, b] of Object.entries(s.bullets || {})) {
-          snap.bullets[id] = { x: b.x, y: b.y, vx: b.vx, vy: b.vy, owner: b.owner, id };
-        }
+      const plainBullets = toPlain(s.bullets);
+      for (const id in plainBullets) {
+        const b = plainBullets[id];
+        snap.bullets[id] = { x: b.x, y: b.y, vx: b.vx, vy: b.vy, owner: b.owner, id };
+      }
+
+      // Projectiles (enemy projectiles)
+      const plainProjectiles = toPlain(s.projectiles);
+      for (const id in plainProjectiles) {
+        const p = plainProjectiles[id];
+        snap.projectiles[id] = { x: p.x, y: p.y, vx: p.vx, vy: p.vy, damage: p.damage, id };
+      }
+
+      // Nests
+      const plainNests = toPlain(s.nests);
+      for (const id in plainNests) {
+        const n = plainNests[id];
+        snap.nests[id] = { x: n.x, y: n.y, hp: n.hp, alive: n.alive, objectiveId: n.objectiveId, id };
+      }
+
+      // Objectives
+      const plainObjectives = toPlain(s.objectives);
+      for (const id in plainObjectives) {
+        const o = plainObjectives[id];
+        snap.objectives[id] = {
+          x: o.x, y: o.y, type: o.type, status: o.status, progress: o.progress,
+          isPrimary: o.isPrimary, hp: o.hp, id
+        };
+      }
+
+      // Mission state
+      if (s.mission) {
+        const m = s.mission;
+        snap.mission = {
+          missionId: m.missionId,
+          status: m.status,
+          alertLevel: m.alertLevel,
+          extractionOpen: m.extractionOpen,
+          extractionTimer: m.extractionTimer,
+          extractZoneX: m.extractZoneX,
+          extractZoneY: m.extractZoneY,
+          mapWidth: m.mapWidth,
+          mapHeight: m.mapHeight,
+          extractZone: { x: m.extractZoneX, y: m.extractZoneY }
+        };
       }
 
       this.snapshots.push(snap);
       if (this.snapshots.length > this.maxSnapshots) this.snapshots.shift();
-
-      if (Math.random() < 0.03) {
-        console.debug('[NetSync] snapshot', { t: snap.t, tick: snap.tick, players: Object.keys(snap.players).length, ids: Object.keys(snap.players).slice(0,6) });
-      }
     };
 
     if (this.networkService.gameRoom && this.networkService.gameRoom.onStateChange) {
@@ -80,62 +126,11 @@ export default class NetSync {
         }
       }, 100);
     }
-
-    this._startInputLoop();
   }
 
   stop() {
     try { this.networkService.gameRoom?.removeListener?.('state', this._onState); } catch (e) {}
-    if (this._inputTimer) { clearInterval(this._inputTimer); this._inputTimer = null; }
     this.snapshots = [];
-  }
-
-  _startInputLoop() {
-    if (this._inputTimer) return;
-    this._inputTimer = setInterval(() => this._sendInputSnapshot(), this.inputInterval);
-  }
-
-  _sendInputSnapshot() {
-    const reg = this.scene.registry.get('input') || null;
-    let up = 0, down = 0, left = 0, right = 0, aimAngle = null;
-    if (reg) {
-      up = reg.vector?.y < -0.5 ? 1 : 0;
-      down = reg.vector?.y > 0.5 ? 1 : 0;
-      left = reg.vector?.x < -0.5 ? 1 : 0;
-      right = reg.vector?.x > 0.5 ? 1 : 0;
-      if (reg.aim) aimAngle = Math.atan2(reg.aim.y - (this.scene.player?.y || 0), reg.aim.x - (this.scene.player?.x || 0));
-    } else {
-      const keys = this.scene.keys;
-      if (keys) {
-        left = keys.A?.isDown ? 1 : 0;
-        right = keys.D?.isDown ? 1 : 0;
-        up = keys.W?.isDown ? 1 : 0;
-        down = keys.S?.isDown ? 1 : 0;
-      }
-    }
-
-    const input = { seq: ++this._inputSeq, up: !!up, down: !!down, left: !!left, right: !!right, aimAngle };
-    try {
-      // prefer networkService.sendInput convenience method if available
-      if (typeof this.networkService.sendInput === 'function') {
-        this.networkService.sendInput(input);
-      } else if (this.networkService.gameRoom && typeof this.networkService.gameRoom.send === 'function') {
-        this.networkService.gameRoom.send('input', input);
-      } else {
-        console.warn('[NetSync] no networkService.sendInput or gameRoom.send available');
-      }
-      console.debug(`[NetSync] sendInput seq=${input.seq} up=${input.up} down=${input.down} left=${input.left} right=${input.right}`);
-
-      // small local prediction nudge so movement is responsive:
-      if (this.scene.player && this.predStrength > 0) {
-        const speed = (this.scene.CFG?.player?.speed || 80);
-        const dt = (this.inputInterval / 1000);
-        this.scene.player.x += ((right - left) * speed) * dt * this.predStrength;
-        this.scene.player.y += ((down - up) * speed) * dt * this.predStrength;
-      }
-    } catch (e) {
-      console.debug('[NetSync] sendInput failed', e?.message || e);
-    }
   }
 
   // interpolation helpers
@@ -155,12 +150,21 @@ export default class NetSync {
     // fallback to latest snapshot if we can't interpolate
     if (!pair) {
       const latest = this.snapshots[this.snapshots.length - 1];
-      if (!latest) return callback({ players: {}, enemies: {}, bullets: {}, snapshotMeta: { playersIds: [] } });
-      const myKey = this.networkService.playerKey || this.networkService.sessionId;
+      if (!latest) {
+        return callback({
+          players: {}, enemies: {}, bullets: {}, projectiles: {},
+          nests: {}, objectives: {}, mission: {},
+          snapshotMeta: { playersIds: [] }
+        });
+      }
       return callback({
         players: latest.players,
         enemies: latest.enemies,
         bullets: latest.bullets,
+        projectiles: latest.projectiles,
+        nests: latest.nests,
+        objectives: latest.objectives,
+        mission: latest.mission,
         snapshotMeta: { playersIds: Object.keys(latest.players) }
       });
     }
@@ -186,18 +190,22 @@ export default class NetSync {
       const nb = newer.players[id];
 
       if (!oa && nb) {
-        outPlayers[id] = { x: safeNum(nb.x), y: safeNum(nb.y), hp: safeNum(nb.hp), alive: !!nb.alive, score: safeNum(nb.score) };
+        outPlayers[id] = { ...nb, x: safeNum(nb.x), y: safeNum(nb.y), hp: safeNum(nb.hp) };
         continue;
       }
       if (!nb && oa) {
-        outPlayers[id] = { x: safeNum(oa.x), y: safeNum(oa.y), hp: safeNum(oa.hp), alive: !!oa.alive, score: safeNum(oa.score) };
+        outPlayers[id] = { ...oa, x: safeNum(oa.x), y: safeNum(oa.y), hp: safeNum(oa.hp) };
         continue;
       }
       // both exist: interpolate numeric fields
-      const ix = this._lerp(safeNum(oa.x), safeNum(nb.x), factor);
-      const iy = this._lerp(safeNum(oa.y), safeNum(nb.y), factor);
-      const ihp = this._lerp(safeNum(oa.hp), safeNum(nb.hp), factor);
-      outPlayers[id] = { x: ix, y: iy, hp: ihp, alive: !!nb.alive, score: safeNum(nb.score) };
+      outPlayers[id] = {
+        ...nb,
+        x: this._lerp(safeNum(oa.x), safeNum(nb.x), factor),
+        y: this._lerp(safeNum(oa.y), safeNum(nb.y), factor),
+        hp: this._lerp(safeNum(oa.hp), safeNum(nb.hp), factor),
+        alive: !!nb.alive,
+        score: safeNum(nb.score)
+      };
     }
 
     // enemies
@@ -207,17 +215,20 @@ export default class NetSync {
       const oa = older.enemies[id];
       const nb = newer.enemies[id];
       if (!oa && nb) {
-        outEnemies[id] = { x: safeNum(nb.x), y: safeNum(nb.y), hp: safeNum(nb.hp), alive: !!nb.alive };
+        outEnemies[id] = { ...nb, x: safeNum(nb.x), y: safeNum(nb.y), hp: safeNum(nb.hp) };
         continue;
       }
       if (!nb && oa) {
-        outEnemies[id] = { x: safeNum(oa.x), y: safeNum(oa.y), hp: safeNum(oa.hp), alive: !!oa.alive };
+        outEnemies[id] = { ...oa, x: safeNum(oa.x), y: safeNum(oa.y), hp: safeNum(oa.hp) };
         continue;
       }
-      const ix = this._lerp(safeNum(oa.x), safeNum(nb.x), factor);
-      const iy = this._lerp(safeNum(oa.y), safeNum(nb.y), factor);
-      const ihp = this._lerp(safeNum(oa.hp), safeNum(nb.hp), factor);
-      outEnemies[id] = { x: ix, y: iy, hp: ihp, alive: !!nb.alive };
+      outEnemies[id] = {
+        ...nb,
+        x: this._lerp(safeNum(oa.x), safeNum(nb.x), factor),
+        y: this._lerp(safeNum(oa.y), safeNum(nb.y), factor),
+        hp: this._lerp(safeNum(oa.hp), safeNum(nb.hp), factor),
+        alive: !!nb.alive
+      };
     }
 
     // bullets
@@ -227,26 +238,72 @@ export default class NetSync {
       const oa = older.bullets[id];
       const nb = newer.bullets[id];
       if (!oa && nb) {
-        outBullets[id] = { x: safeNum(nb.x), y: safeNum(nb.y), vx: safeNum(nb.vx), vy: safeNum(nb.vy), owner: nb.owner };
+        outBullets[id] = { ...nb, x: safeNum(nb.x), y: safeNum(nb.y) };
         continue;
       }
       if (!nb && oa) {
-        outBullets[id] = { x: safeNum(oa.x), y: safeNum(oa.y), vx: safeNum(oa.vx), vy: safeNum(oa.vy), owner: oa.owner };
+        outBullets[id] = { ...oa, x: safeNum(oa.x), y: safeNum(oa.y) };
         continue;
       }
-      const ix = this._lerp(safeNum(oa.x), safeNum(nb.x), factor);
-      const iy = this._lerp(safeNum(oa.y), safeNum(nb.y), factor);
-      const ivx = this._lerp(safeNum(oa.vx), safeNum(nb.vx), factor);
-      const ivy = this._lerp(safeNum(oa.vy), safeNum(nb.vy), factor);
-      outBullets[id] = { x: ix, y: iy, vx: ivx, vy: ivy, owner: nb.owner };
+      outBullets[id] = {
+        ...nb,
+        x: this._lerp(safeNum(oa.x), safeNum(nb.x), factor),
+        y: this._lerp(safeNum(oa.y), safeNum(nb.y), factor),
+        vx: this._lerp(safeNum(oa.vx), safeNum(nb.vx), factor),
+        vy: this._lerp(safeNum(oa.vy), safeNum(nb.vy), factor)
+      };
     }
 
-    const myKey = this.networkService.playerKey || this.networkService.sessionId;
+    // projectiles
+    const outProjectiles = {};
+    const projIds = unionKeys(older.projectiles, newer.projectiles);
+    for (const id of projIds) {
+      const oa = older.projectiles[id];
+      const nb = newer.projectiles[id];
+      if (!oa && nb) {
+        outProjectiles[id] = { ...nb, x: safeNum(nb.x), y: safeNum(nb.y) };
+        continue;
+      }
+      if (!nb && oa) {
+        outProjectiles[id] = { ...oa, x: safeNum(oa.x), y: safeNum(oa.y) };
+        continue;
+      }
+      outProjectiles[id] = {
+        ...nb,
+        x: this._lerp(safeNum(oa.x), safeNum(nb.x), factor),
+        y: this._lerp(safeNum(oa.y), safeNum(nb.y), factor)
+      };
+    }
+
+    // nests (static position, just use newer)
+    const outNests = { ...newer.nests };
+
+    // objectives (static position, just use newer)
+    const outObjectives = { ...newer.objectives };
+
+    // mission state (use newer, interpolate timer)
+    const outMission = { ...newer.mission };
+    if (older.mission && newer.mission) {
+      outMission.extractionTimer = this._lerp(
+        safeNum(older.mission.extractionTimer),
+        safeNum(newer.mission.extractionTimer),
+        factor
+      );
+      outMission.alertLevel = this._lerp(
+        safeNum(older.mission.alertLevel),
+        safeNum(newer.mission.alertLevel),
+        factor
+      );
+    }
 
     callback({
       players: outPlayers,
       enemies: outEnemies,
       bullets: outBullets,
+      projectiles: outProjectiles,
+      nests: outNests,
+      objectives: outObjectives,
+      mission: outMission,
       snapshotMeta: { playersIds: playerIds }
     });
   }

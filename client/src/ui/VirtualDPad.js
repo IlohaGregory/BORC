@@ -40,7 +40,22 @@ export default class VirtualDPad {
     hit.on('pointerupoutside', () => this._end());
 
     this._layout(); this._draw();
-    scene.scale.on('resize', () => this._layout());
+    this._resizeHandler = () => this._layout();
+    scene.scale.on('resize', this._resizeHandler);
+  }
+
+  destroy() {
+    if (this._resizeHandler) {
+      this.scene.scale.off('resize', this._resizeHandler);
+      this._resizeHandler = null;
+    }
+    if (this.container) {
+      this.container.destroy();
+      this.container = null;
+    }
+    this.base = null;
+    this.knob = null;
+    this.enabled = false;
   }
 
   isEnabled() { return !!this.enabled; }
