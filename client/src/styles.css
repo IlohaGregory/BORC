@@ -20,9 +20,83 @@
     }
 
     .btn {
-      font-family: monospace; padding:8px 12px;
-      border:1px solid #fff; background:transparent; color:#fff; cursor:pointer;
+      font-family: monospace;
+      padding: 12px 20px;
+      border: 2px solid #ffffff;
+      border-radius: 8px;
+      background: rgba(20, 20, 20, 0.85);
+      color: #ffffff;
+      font-weight: bold;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.6);
+      text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+      transition: all 0.2s ease;
+      position: relative;
+      z-index: 10;
     }
+
+    .btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.6), 0 6px 16px rgba(0, 0, 0, 0.8);
+      border-color: #4df3ff;
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Button variants for inline-styled buttons */
+    button {
+      font-family: monospace;
+      font-weight: bold;
+      text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+      transition: all 0.2s ease;
+      position: relative;
+      z-index: 10;
+    }
+
+    button:not([style*="background"]) {
+      background: rgba(20, 20, 20, 0.85);
+      border: 2px solid #ffffff;
+      border-radius: 6px;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
+
+    button:hover {
+      transform: scale(1.05);
+      filter: brightness(1.2);
+    }
+
+    button:active {
+      transform: scale(0.95);
+    }
+
+    button[style*="background:#4d73fd"],
+    button[style*="background: #4d73fd"] {
+      box-shadow: 0 0 12px rgba(77, 115, 253, 0.6), 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+      border: 2px solid #6b8fff !important;
+    }
+
+    button[style*="background:#3ae374"],
+    button[style*="background: #3ae374"] {
+      box-shadow: 0 0 12px rgba(58, 227, 116, 0.6), 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+      border: 2px solid #5aff94 !important;
+    }
+
+    button[style*="background:#ff6a6a"],
+    button[style*="background: #ff6a6a"] {
+      box-shadow: 0 0 12px rgba(255, 106, 106, 0.6), 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+      border: 2px solid #ff8a8a !important;
+    }
+
     .panel {
       position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     }

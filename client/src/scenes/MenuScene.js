@@ -6,20 +6,33 @@ export default class MenuScene extends Phaser.Scene {
     super('Menu');
   }
 
+  preload() {
+  this.load.image('bg_mobile', '././assets/Backgrounds/Title-Screens/Title-page-mobile.png');
+  this.load.image('bg_desktop', '././assets/Backgrounds/Title-Screens/Title-page-desktop.png');
+  }
+
   create() {
     const { width, height } = this.scale;
 
-    // --- Title ---
-    this.add.text(width / 2, height / 3 - 40, 'BORC', {
-      fontFamily: 'monospace',
-      fontSize: 38,
-      color: '#4d73fdff'
-    }).setOrigin(0.5);
+    const isDesktop = this.sys.game.device.os.desktop;
+    const bgKey = isDesktop ? 'bg_desktop' : 'bg_mobile';
+    this.bg = this.add.image(0, 0, bgKey)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(-1) // Ensure it's behind other elements
+      .setDisplaySize(width, height); // Scale to fit screen
+
+    // Handle resize to keep background filling the screen
+    this.scale.on('resize', (gameSize) => {
+      if (this.bg) {
+        this.bg.setDisplaySize(gameSize.width, gameSize.height);
+      }
+    });
 
     // --- UI Panel ---
     const panel = document.createElement('div');
     panel.className = 'panel';
-    this.add.dom(0, height / 3, panel).setOrigin(0);
+    this.add.dom(0, height / 2, panel).setOrigin(0);
     panel.innerHTML = `
       <div style="display:flex;gap:12px;flex-direction:column;align-items:center;">
         <button id="play" class="btn" style="font-size:18px;padding:12px 32px;">PLAY</button>
@@ -56,6 +69,12 @@ export default class MenuScene extends Phaser.Scene {
 
     // --- PLAY button: always goes to WaitingRoom ---
     btnPlay.onclick = () => {
+      this.sound.play('bg_music', {
+        marker: 'trimmed_loop',
+        loop: true,
+        volume: 0.5
+      });
+      this.sound.play('button_click');
       if (btnPlay.disabled) return;
       btnPlay.disabled = true;
       this.scene.start('WaitingRoom', { walletConnected: walletService.isConnected() });

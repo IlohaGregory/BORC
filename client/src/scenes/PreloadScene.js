@@ -4,33 +4,39 @@ export default class PreloadScene extends Phaser.Scene {
   constructor(){ super('Preload'); }
 
   preload(){
-    // load player spritesheet 
-    this.load.spritesheet('p_idle_front', 'assets/sprites/Character-Idle-Sheet.png', {
+    // load player spritesheet
+    this.load.spritesheet('p_idle_front', 'assets/sprites/Entities/Players/Character-Idle-Sheet.png', {
       frameWidth: 50, frameHeight: 50
     });
-    this.load.spritesheet('p_idle_back',  'assets/sprites/Character-idle(-ve)-Sheet.png', {
+    this.load.spritesheet('p_idle_back',  'assets/sprites/Entities/Players/Character-idle(-ve)-Sheet.png', {
       frameWidth: 50, frameHeight: 50
     });
-    this.load.spritesheet('p_walk_front', 'assets/sprites/Character-Walk(+ve)-Sheet.png', {
+    this.load.spritesheet('p_walk_front', 'assets/sprites/Entities/Players/Character-Walk(+ve)-Sheet.png', {
       frameWidth: 50, frameHeight: 50
     });
-    this.load.spritesheet('p_walk_back',  'assets/sprites/Character-Walk(-ve)-Sheet.png', {
+    this.load.spritesheet('p_walk_back',  'assets/sprites/Entities/Players/Character-Walk(-ve)-Sheet.png', {
       frameWidth: 50, frameHeight: 50
     });
 
     // load enemy spritesheet
-    this.load.spritesheet('e_walk_front', 'assets/sprites/Enemy-Walk(+ve)-Sheet.png', {
+    this.load.spritesheet('e_walk_front', 'assets/sprites/Entities/Enemies/Enemy-Walk(+ve)-Sheet.png', {
       frameWidth: 216, frameHeight: 171
     });
-    this.load.spritesheet('e_attack_front', 'assets/sprites/Enemy-attack1(+ve)-Sheet.png', {
+    this.load.spritesheet('e_attack_front', 'assets/sprites/Entities/Enemies/Enemy-attack1(+ve)-Sheet.png', {
       frameWidth: 216, frameHeight: 171
     });
 
     // bullet and weapon sprite
-    this.load.spritesheet('bullet', 'assets/Weapons/Bullet-Sheet.png', {
+    this.load.spritesheet('bullet', 'assets/sprites/Weapons/Bullets/AR-Bullet-Sheet.png', {
       frameWidth : 16, frameHeight: 16
     })
     // this.load.image('bullet', 'assets/Weapons/Bullet-Sheet.png')
+
+    // loading sounds
+    this.load.audio('button_click', '././assets/Sounds/button-click.mp3');
+    this.load.audio('bg_music', '././assets/Sounds/background-music.mp3');
+    this.load.audio('player_death', '././assets/Sounds/player-death.mp3');
+    const bgMusic = this.sound.get('bg_music');
   };
 
   create(){
@@ -81,5 +87,18 @@ export default class PreloadScene extends Phaser.Scene {
     });
 
     this.scene.start('Menu');
+  }
+
+
+  if (bgMusic) {
+    const totalDuration = bgMusic.totalDuration; // In seconds
+    const loopDuration = totalDuration - 2; // Trim last 2 secs
+    
+    // Add marker for trimmed loop
+    bgMusic.addMarker({
+      name: 'trimmed_loop',
+      start: 0,
+      duration: loopDuration
+    });
   }
 }

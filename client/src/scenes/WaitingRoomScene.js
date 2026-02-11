@@ -53,15 +53,31 @@ export default class WaitingRoomScene extends Phaser.Scene {
       fontFamily: 'monospace',
       display: 'none',
       borderRadius: '8px',
-      maxWidth: '320px'
+
+      width: '280px',
+      maxWidth: '90vw',
+      maxHeight: '40vh',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      wordWrap: 'break-word',
+      overflowWrap: 'break-word'
     });
+
     // Use Phaser DOM system - position top-right with offset
-    this.inviteBoxDom = this.add.dom(width - 10, 30, this.inviteBox).setOrigin(1, 0).setScrollFactor(0).setDepth(9999);
+   this.inviteBoxDom = this.add.dom(width - 16, 60, this.inviteBox).setOrigin(1, 0).setScrollFactor(0)
+    .setDepth(9999);
 
     this._buildPanel();
     this._wireCallbacks();
 
     this.input.keyboard.on('keydown-ESC', () => this._exitToMenu());
+
+    this.scale.on('resize', (gameSize) => {
+      const { width } = gameSize;
+      if (this.inviteBoxDom) {
+        this.inviteBoxDom.setPosition(width - 16, 60);
+      }
+    });
   }
 
   _wireCallbacks() {
@@ -123,7 +139,7 @@ export default class WaitingRoomScene extends Phaser.Scene {
 
       <div id="wrSoloNotice" style="margin:6px 0;padding:8px;background:rgba(255,255,255,0.05);border-radius:4px;font-size:11px;color:#aaa;">
         Solo play — scores are local only. No leaderboard, no rewards.
-        ${!this._walletConnected ? '<br/><br/><button id="wrConnectWallet" style="font-size:11px;padding:4px 8px;cursor:pointer;">Connect Wallet to play with friends</button>' : ''}
+        ${!this._walletConnected ? '<br/><br/><button id="wrConnectWallet" style="font-size:11px;padding:4px 8px;cursor:pointer;background:#fff;color:#000;border:none;box-shadow:none;text-shadow:none;border-radius:4px;">Connect Wallet to play with friends</button>' : ''}
       </div>
 
       <div id="wrMpPanel" style="display:none;"></div>
@@ -184,24 +200,62 @@ export default class WaitingRoomScene extends Phaser.Scene {
       };
     }
 
-    startBtn.onclick = () => {
+    startBtn.onclick = async () => {
       if (startBtn.disabled) return;
-      startBtn.disabled = true;
 
       const name = nameInput.value.trim() || 'Pilot';
       const baseName = walletService.displayName?.endsWith?.('.base.eth') ? walletService.displayName : null;
-      const address = walletService.getAddress?.() || '0x0';
+      const address = walletService.getAddress?.() || 'guest';
       profileService.save({ displayName: name, baseName });
       const profile = { displayName: name, baseName, address };
 
-      if (soloCheckbox.checked) {
-        // Go to difficulty select for solo play (procedural missions)
+      startBtn.disabled = true;
+      startBtn.textContent = 'Starting...';
+
+      const solo = soloCheckbox.checked;
+
+      // --- SOLO ---
+      if (solo) {
         this.scene.start('DifficultySelect', { mode: 'solo', profile });
-      } else {
-        this._startMultiplayer(profile);
+        return;
+      }
+
+      // --- IN SQUAD ---
+      if (this._squad) {
+        const myAddr = address.toLowerCase();
+        const isLeader = this._squad.leader === myAddr;
+        const allReady = this._squad.members.every(m => m.ready);
+
+        if (!isLeader) {
+          alert('Only the squad leader can start the match.');
+          this._updateStartButtonState();
+          return;
+        }
+
+        if (!allReady) {
+          alert('All squad members must be ready.');
+          this._updateStartButtonState();
+          return;
+        }
+
+        try {
+          await socialService.startMatch(this._squad.id, address, null, this._selectedDifficulty);
+          return;
+        } catch (e) {
+          alert('Start failed: ' + (e?.message || e));
+          this._updateStartButtonState();
+          return;
+        }
+      }
+
+      // --- MULTIPLAYER NO SQUAD (MATCHMAKING) ---
+      try {
+        await socialService.startMatchmaking(address || 'guest_' + Math.random().toString(36).substr(2, 9));
+      } catch (e) {
+        alert('Matchmaking failed: ' + (e?.message || e));
+        this._updateStartButtonState();
       }
     };
-
     // Initial visibility
     if (soloCheckbox.checked) {
       soloNotice.style.display = 'block';
@@ -308,10 +362,10 @@ export default class WaitingRoomScene extends Phaser.Scene {
     if (incoming.length > 0) {
       html += '<div style="margin-bottom:8px;"><strong style="font-size:11px;color:#ffaa00;">Friend Requests</strong></div>';
       incoming.forEach(r => {
-        html += `<div style="margin:4px 0;font-size:11px;">
-          ${getDisplayName(r)}
-          <button data-accept-from="${r.address}" class="acceptFriendBtn" style="margin-left:4px;font-size:10px;cursor:pointer;background:#3ae374;border:none;border-radius:3px;padding:2px 6px;">Accept</button>
-          <button data-reject-from="${r.address}" class="rejectFriendBtn" style="margin-left:2px;font-size:10px;cursor:pointer;background:#ff6a6a;border:none;border-radius:3px;padding:2px 6px;color:#fff;">Reject</button>
+       html += `<div style="margin:4px 0;font-size:11px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;max-width:100%;overflow:hidden;">
+          <span style="max-width:40%;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">${getDisplayName(r)}</span>
+         <button data-accept-from="${r.address}" class="acceptFriendBtn" style="margin-left:4px;font-size:10px;cursor:pointer;background:#fff;color:#000;border:1px solid #000;border-radius:3px;padding:2px 6px;">Accept</button>
+          <button data-reject-from="${r.address}" class="rejectFriendBtn" style="margin-left:2px;font-size:10px;cursor:pointer;background:#fff;color:#000;border:1px solid #000;border-radius:3px;padding:2px 6px;">Reject</button>
         </div>`;
       });
       html += '<hr style="border-color:#333;"/>';
@@ -336,7 +390,7 @@ export default class WaitingRoomScene extends Phaser.Scene {
     html += '<hr style="border-color:#333;"/>';
 
     // --- Online players (discovery) ---
-    html += '<div style="margin-bottom:4px;"><strong style="font-size:11px;">Online Players</strong> <button id="refreshOnline" style="font-size:9px;cursor:pointer;">Refresh</button></div>';
+    html += '<div style="margin-bottom:4px;"><button id="refreshOnline" style="font-size:9px;cursor:pointer;background:#fff;color:#000;">Refresh</button></div>'
     const otherOnline = this._onlinePlayers.filter(p => p.address !== myAddr);
     if (otherOnline.length === 0) {
       html += '<div style="font-size:10px;color:#666;margin-bottom:6px;">No other players online</div>';
@@ -346,10 +400,10 @@ export default class WaitingRoomScene extends Phaser.Scene {
         html += `<div style="margin:4px 0;font-size:11px;">
           ${getDisplayName(p)}`;
         if (!isFriend) {
-          html += ` <button data-add-friend="${p.address}" class="addFriendBtn" style="font-size:9px;cursor:pointer;">+ Friend</button>`;
+          html += ` <button data-add-friend="${p.address}" class="addFriendBtn" style="font-size:9px;cursor:pointer;background:#fff;color:#000;">+ Friend</button>`;
         }
         if (this._squad) {
-          html += ` <button data-invite-player="${p.address}" class="invitePlayerBtn" style="font-size:9px;cursor:pointer;">Invite</button>`;
+          html += ` <button data-invite-player="${p.address}" class="invitePlayerBtn" style="font-size:9px;cursor:pointer;background:#fff;color:#000;">Invite</button>`;
         }
         html += `</div>`;
       });
@@ -360,7 +414,7 @@ export default class WaitingRoomScene extends Phaser.Scene {
     // --- Squad panel ---
     html += '<div style="margin-bottom:4px;"><strong style="font-size:11px;">Squad</strong></div>';
     if (!this._squad) {
-      html += `<button id="createSquadBtn" style="font-size:11px;cursor:pointer;padding:4px 10px;">Create Squad</button>`;
+      html += `<button id="createSquadBtn" style="font-size:11px;cursor:pointer;padding:4px 10px;background:#fff;color:#000;">Create Squad</button>`;
     } else {
       const sq = this._squad;
       const isLeader = sq.leader === myAddr;
@@ -397,10 +451,9 @@ export default class WaitingRoomScene extends Phaser.Scene {
         const amReady = me?.ready ?? false;
         html += `<button id="readyBtn" style="font-size:11px;cursor:pointer;padding:4px 10px;">${amReady ? 'Unready' : 'Ready'}</button>`;
       }
-      html += `<button id="leaveSquadBtn" style="font-size:11px;cursor:pointer;padding:4px 10px;">Leave</button>`;
+      html += `<button id="leaveSquadBtn" style="font-size:11px;cursor:pointer;padding:4px 10px;;background:#fff;color:#000;">Leave</button>`;
       if (isLeader) {
         const allReady = sq.members.every(m => m.ready);
-        html += `<button id="squadStartBtn" style="font-size:11px;cursor:pointer;padding:4px 10px;background:#3ae374;border:none;border-radius:4px;" ${allReady ? '' : 'disabled'}>Start Squad</button>`;
       }
       html += '</div>';
     }
@@ -501,24 +554,40 @@ export default class WaitingRoomScene extends Phaser.Scene {
         this._selectedDifficulty = parseInt(difficultySelect.value, 10);
       };
     }
+    this._updateStartButtonState();
+  }
 
-    // Start squad
-    const squadStartBtn = mpPanel.querySelector('#squadStartBtn');
-    if (squadStartBtn) {
-      squadStartBtn.onclick = async () => {
-        squadStartBtn.disabled = true;
-        squadStartBtn.textContent = 'Starting...';
-        try {
-          // Use difficulty-based procedural generation
-          await socialService.startMatch(this._squad.id, myAddress, null, this._selectedDifficulty);
-        } catch (e) {
-          console.error('Start failed', e);
-          alert('Start failed: ' + (e?.message || e));
-          squadStartBtn.disabled = false;
-          squadStartBtn.textContent = 'Start Squad';
-        }
-      };
+  _updateStartButtonState() {
+    const startBtn = this.panel?.querySelector('#wrStart');
+    const soloCheckbox = this.panel?.querySelector('#wrSolo');
+    if (!startBtn || !soloCheckbox) return;
+
+    // SOLO
+    if (soloCheckbox.checked) {
+      startBtn.textContent = 'START SOLO';
+      startBtn.disabled = false;
+      return;
     }
+
+    // SQUAD
+    if (this._squad) {
+      const myAddr = walletService.getAddress?.()?.toLowerCase();
+      const isLeader = this._squad.leader === myAddr;
+      const allReady = this._squad.members.every(m => m.ready);
+
+      if (isLeader) {
+        startBtn.textContent = allReady ? 'START SQUAD' : 'WAITING FOR READY';
+        startBtn.disabled = !allReady;
+      } else {
+        startBtn.textContent = 'WAITING FOR LEADER';
+        startBtn.disabled = true;
+      }
+      return;
+    }
+
+    // MATCHMAKING
+    startBtn.textContent = 'FIND MATCH';
+    startBtn.disabled = false;
   }
 
   async _startMultiplayer(profile) {
@@ -554,43 +623,112 @@ export default class WaitingRoomScene extends Phaser.Scene {
   }
 
   _handleSquadInvite(msg) {
-    this.inviteBox.innerHTML = `
-      <div style="font-size:14px"><strong>Squad Invite from ${msg.fromName || msg.from}</strong></div>
-      <div style="margin-top:8px;color:#ddd;font-size:12px">Join their squad?</div>
-      <div style="margin-top:10px;display:flex;gap:8px">
-        <button id="acceptInvite" style="cursor:pointer;">Accept</button>
-        <button id="declineInvite" style="cursor:pointer;">Decline</button>
-      </div>
-    `;
-    this.inviteBox.style.display = 'block';
-    setTimeout(() => { if (this.inviteBox) this.inviteBox.style.display = 'none'; }, 60000);
+    if (!this.inviteBox) return;
 
-    this.inviteBox.querySelector('#acceptInvite').onclick = async () => {
+    this.inviteBox.innerHTML = `
+      <div style="font-size:14px;font-weight:bold;margin-bottom:6px;color:#4d73fd;">
+        Squad Invite
+      </div>
+
+      <div style="font-size:12px;margin-bottom:10px;color:#ddd;">
+        <span style="color:#fff;">${msg.fromName || msg.from}</span> invited you to join their squad
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button id="acceptInvite" style="
+          flex:1;
+          padding:10px 0;
+          font-size:13px;
+          font-weight:bold;
+          background:linear-gradient(145deg,#3ae374,#20bf6b);
+          color:#000;
+          border:none;
+          border-radius:6px;
+          cursor:pointer;
+          box-shadow:0 0 10px rgba(58,227,116,0.6);
+          transition:transform .1s ease, box-shadow .15s ease;
+        ">ACCEPT</button>
+
+        <button id="declineInvite" style="
+          flex:1;
+          padding:10px 0;
+          font-size:13px;
+          font-weight:bold;
+          background:linear-gradient(145deg,#ff6b6b,#c0392b);
+          color:#fff;
+          border:none;
+          border-radius:6px;
+          cursor:pointer;
+          box-shadow:0 0 10px rgba(255,107,107,0.5);
+          transition:transform .1s ease, box-shadow .15s ease;
+        ">DECLINE</button>
+      </div>`;
+
+    this.inviteBox.style.display = 'block';
+
+    const acceptBtn = this.inviteBox.querySelector('#acceptInvite');
+    const declineBtn = this.inviteBox.querySelector('#declineInvite');
+
+    // --- Button press animation ---
+    const animateBtn = (btn) => {
+      btn.onmousedown = () => btn.style.transform = 'scale(0.95)';
+      btn.onmouseup = () => btn.style.transform = 'scale(1)';
+      btn.onmouseleave = () => btn.style.transform = 'scale(1)';
+    };
+    animateBtn(acceptBtn);
+    animateBtn(declineBtn);
+
+    // --- Hover glow that restores base shadow ---
+    const hover = (btn, glow) => {
+      const baseShadow = btn.style.boxShadow;
+      btn.onmouseenter = () => btn.style.boxShadow = glow;
+      btn.onmouseleave = () => btn.style.boxShadow = baseShadow;
+    };
+    hover(acceptBtn, '0 0 14px #3ae374');
+    hover(declineBtn, '0 0 14px #ff6b6b');
+
+    // --- Clear old timeout to avoid race condition ---
+    if (this._inviteTimeout) clearTimeout(this._inviteTimeout);
+    this._inviteTimeout = setTimeout(() => this._removeInviteBox(), 60000);
+
+    // --- ACCEPT ---
+    acceptBtn.onclick = async () => {
       const myAddr = walletService.getAddress?.();
       if (!myAddr) return;
+
+      acceptBtn.disabled = true;
+      acceptBtn.textContent = 'Joining...';
+
       try {
         const data = await socialService.joinSquad(msg.squadId, myAddr);
         this._squad = data.squad;
-        // Uncheck solo
+
+        // Uncheck solo if active
         const soloCheckbox = this.panel?.querySelector('#wrSolo');
         if (soloCheckbox && soloCheckbox.checked) {
           soloCheckbox.checked = false;
           soloCheckbox.dispatchEvent(new Event('change'));
         }
+
         this._refreshMpPanel();
+        this._updateStartButtonState();
+
       } catch (err) {
         console.error('Join squad failed', err);
         alert('Failed to join squad: ' + (err?.message || err));
-      } finally {
-        this.inviteBox.style.display = 'none';
+        acceptBtn.disabled = false;
+        acceptBtn.textContent = 'ACCEPT';
+        return;
       }
+
+      this._removeInviteBox();
     };
 
-    this.inviteBox.querySelector('#declineInvite').onclick = () => {
-      this.inviteBox.style.display = 'none';
+    // --- DECLINE ---
+    declineBtn.onclick = () => {
+      this._removeInviteBox();
     };
   }
-
   async _handleGameReady(msg) {
     if (this._joining) return;
     this._joining = true;
@@ -610,6 +748,17 @@ export default class WaitingRoomScene extends Phaser.Scene {
       this._joining = false;
       this.panel?.querySelectorAll('button').forEach(b => b.disabled = false);
     }
+  }
+
+  _removeInviteBox() {
+    if (!this.inviteBoxDom) return;
+
+    // Remove Phaser DOM wrapper
+    this.inviteBoxDom.destroy();
+
+    // Remove raw element reference
+    this.inviteBox = null;
+    this.inviteBoxDom = null;
   }
 
   _showNotification(text) {
@@ -658,5 +807,8 @@ export default class WaitingRoomScene extends Phaser.Scene {
     socialService.onFriendOnline = null;
     socialService.onFriendOffline = null;
     socialService.onMatchmakingStatus = null;
+    
+    if (this._inviteTimeout) clearTimeout(this._inviteTimeout);
+    this.scale.off('resize');
   }
 }

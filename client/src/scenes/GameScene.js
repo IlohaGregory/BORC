@@ -15,6 +15,7 @@ export default class GameScene extends Phaser.Scene {
     super('Game');
     this.otherPlayers = {};
     this.enemySprites = {};
+    this.enemyAnimState = {};
     this.bulletSprites = {};
     this.projectileSprites = {};
     this.nestSprites = {};
@@ -90,6 +91,11 @@ export default class GameScene extends Phaser.Scene {
     this.bulletPool = this.add.group({ classType: Phaser.GameObjects.Sprite, maxSize: 100 });
     this.projectilePool = this.add.group({ classType: Phaser.GameObjects.Sprite, maxSize: 50 });
     this.nestPool = this.add.group({ classType: Phaser.GameObjects.Sprite, maxSize: 10 });
+
+    // Clear any stale sprites from pools
+    this.enemySprites = {};
+    this.enemyAnimState = {};
+    this.enemyPool.clear(true, true);
 
     // Focus indicator graphics
     this.focusIndicator = this.add.graphics().setDepth(10);
@@ -179,6 +185,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     this.gameLoop.onGameOver(({ score, wave, missionStatus }) => {
+      this.sound.play('player_death');
       this.gameLoop.stop();
       this.scene.stop('UI');
       const profile = profileService.load() || this.profile;
@@ -234,6 +241,7 @@ export default class GameScene extends Phaser.Scene {
     // Listen for server messages
     if (networkService.gameRoom) {
       networkService.gameRoom.onMessage('gameover', (data) => {
+        this.sound.play('player_death');
         this.netSync?.stop();
         this.scene.stop('UI');
         const myScore = data.scores?.[this.localPlayerKey] || 0;
@@ -533,6 +541,8 @@ export default class GameScene extends Phaser.Scene {
         if (s) {
           s.setTexture('e_walk_front').setDepth(1).setOrigin(0.5).setActive(true).setVisible(true);
           this.enemySprites[id] = s;
+          // Initialize animation state tracking
+          this.enemyAnimState[id] = { lastAnim: '', lastX: e.x, lastY: e.y };
         }
       }
 
@@ -546,6 +556,29 @@ export default class GameScene extends Phaser.Scene {
         const tint = this._getEnemyTint(e.type);
         s.setScale(scale);
         s.setTint(tint);
+
+        // Animation logic
+        const animState = this.enemyAnimState[id];
+        if (animState) {
+          // Use walk animation for now (attack animation not triggered by server)
+          const animKey = 'e_walk_front';
+
+          // Only play animation if it changed (prevents restart flicker)
+          if (animKey !== animState.lastAnim) {
+            s.anims.play(animKey, true);
+            animState.lastAnim = animKey;
+          }
+
+          // Flip sprite based on movement direction
+          const dx = e.x - animState.lastX;
+          if (Math.abs(dx) > 0.1) {
+            s.setFlipX(dx < 0);
+          }
+
+          // Update last position for next frame
+          animState.lastX = e.x;
+          animState.lastY = e.y;
+        }
       }
     }
 
@@ -555,6 +588,7 @@ export default class GameScene extends Phaser.Scene {
         const s = this.enemySprites[id];
         if (s) this.enemyPool.killAndHide(s);
         delete this.enemySprites[id];
+        delete this.enemyAnimState[id];
       }
     }
   }
@@ -588,12 +622,15 @@ export default class GameScene extends Phaser.Scene {
       if (!s) {
         s = this.bulletPool.get(b.x || 0, b.y || 0);
         if (s) {
-          s.setTexture('bullet').setScale(0.5).setDepth(2).setOrigin(0.5).setActive(true).setVisible(true);
+          s.setTexture('bullet').setFrame(1).setScale(0.5).setDepth(2).setOrigin(0.5).setActive(true).setVisible(true);
           this.bulletSprites[id] = s;
         }
       } else {
         s.x = b.x;
         s.y = b.y;
+      }
+      if (s && b.vx !== undefined && b.vy !== undefined) {
+        s.rotation = Math.atan2(b.vy, b.vx);
       }
     }
 
@@ -615,12 +652,15 @@ export default class GameScene extends Phaser.Scene {
       if (!s) {
         s = this.projectilePool.get(p.x || 0, p.y || 0);
         if (s) {
-          s.setTexture('bullet').setTint(0x88ff44).setScale(0.6).setDepth(2).setOrigin(0.5).setActive(true).setVisible(true);
+          s.setTexture('bullet').setFrame(1).setTint(0x88ff44).setScale(0.6).setDepth(2).setOrigin(0.5).setActive(true).setVisible(true);
           this.projectileSprites[id] = s;
         }
       } else {
         s.x = p.x;
         s.y = p.y;
+      }
+      if (s && p.vx !== undefined && p.vy !== undefined) {
+        s.rotation = Math.atan2(p.vy, p.vx);
       }
     }
 
