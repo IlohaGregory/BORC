@@ -5,16 +5,16 @@ export default class PreloadScene extends Phaser.Scene {
 
   preload(){
     // load player spritesheet
-    this.load.spritesheet('p_idle_front', 'assets/sprites/Entities/Players/Character-Idle-Sheet.png', {
+    this.load.spritesheet('p_idle_front', '././assets/sprites/Entities/Players/Character-Idle-Sheet.png', {
       frameWidth: 50, frameHeight: 50
     });
-    this.load.spritesheet('p_idle_back',  'assets/sprites/Entities/Players/Character-idle(-ve)-Sheet.png', {
+    this.load.spritesheet('p_idle_back',  '././assets/sprites/Entities/Players/Character-idle(-ve)-Sheet.png', {
       frameWidth: 50, frameHeight: 50
     });
-    this.load.spritesheet('p_walk_front', 'assets/sprites/Entities/Players/Character-Walk(+ve)-Sheet.png', {
+    this.load.spritesheet('p_walk_front', '././assets/sprites/Entities/Players/Character-Walk(+ve)-Sheet.png', {
       frameWidth: 50, frameHeight: 50
     });
-    this.load.spritesheet('p_walk_back',  'assets/sprites/Entities/Players/Character-Walk(-ve)-Sheet.png', {
+    this.load.spritesheet('p_walk_back',  '././assets/sprites/Entities/Players/Character-Walk(-ve)-Sheet.png', {
       frameWidth: 50, frameHeight: 50
     });
 
