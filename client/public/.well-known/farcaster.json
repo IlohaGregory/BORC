@@ -1,0 +1,22 @@
+{
+  "name": "BORC",
+  "description": "Multiplayer top-down shooter on Base",
+  "icon": "https://borc.vercel.app/favicon.ico",
+  "url": "https://borc.vercel.app",
+  "accountAssociation": {
+    "header": "0x69891fb96dea3c7b8e14a02a",
+    "payload": "0x0000000000000000000000000000000000000000",
+    "signature": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "frame": {
+    "version": "1",
+    "name": "BORC",
+    "iconUrl": "https://borc.vercel.app/favicon.ico",
+    "homeUrl": "https://borc.vercel.app",
+    "imageUrl": "https://borc.vercel.app/favicon.ico",
+    "buttonTitle": "Play BORC",
+    "splashImageUrl": "https://borc.vercel.app/favicon.ico",
+    "splashBackgroundColor": "#0d0f1a",
+    "webhookUrl": "https://borc.vercel.app/api/frame"
+  }
+}

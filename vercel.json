@@ -12,10 +12,24 @@
   ],
   "routes": [
     { "src": "^/api/(.*)$", "dest": "/api/$1" },
+    { "src": "/.well-known/farcaster.json", "dest": "/client/.well-known/farcaster.json" },
     { "src": "/miniapp.manifest.json", "dest": "/client/miniapp.manifest.json" },
     { "src": "/(.*)", "dest": "/client/$1" }
   ],
   "headers": [
+    {
+      "source": "/.well-known/farcaster.json",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, must-revalidate"
+        }
+      ]
+    },
     {
       "source": "/miniapp.manifest.json",
       "headers": [
