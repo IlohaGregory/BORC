@@ -8,10 +8,10 @@
     "version": "next",
     "name": "BORC",
     "homeUrl": "https://borc-flame.vercel.app",
-    "iconUrl": "https://borc-flame.vercel.app/favicon.ico",
-    "imageUrl": "https://borc-flame.vercel.app/favicon.ico",
+    "iconUrl": "https://borc-flame.vercel.app/icon.jpg",
+    "imageUrl": "https://borc-flame.vercel.app/image.png",
     "buttonTitle": "Play Now",
-    "splashImageUrl": "https://borc-flame.vercel.app/favicon.ico",
+    "splashImageUrl": "https://borc-flame.vercel.app/splashimage.png",
     "splashBackgroundColor": "#0d0f1a"
   }
 }
