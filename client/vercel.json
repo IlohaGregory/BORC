@@ -1,36 +1,26 @@
 {
-  "cleanUrls": false,
-  "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ],
-  "routes": [
-    {
-      "src": "^/.well-known/farcaster.json$",
-      "dest": "/.well-known/farcaster.json",
-      "headers": {
-        "Content-Type": "application/json",
-        "Cache-Control": "public, max-age=86400"
-      }
-    },
-    {
-      "src": "^/miniapp.manifest.json$",
-      "dest": "/miniapp.manifest.json",
-      "headers": {
-        "Content-Type": "application/json"
-      }
-    },
-    {
-      "src": "^/(.*)\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json)$",
-      "dest": "/$1.$2"
+      "source": "/.well-known/farcaster.json",
+      "destination": "/farcaster-manifest.json"
     }
   ],
   "headers": [
     {
       "source": "/.well-known/farcaster.json",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    },
+    {
+      "source": "/farcaster-manifest.json",
       "headers": [
         {
           "key": "Content-Type",

@@ -1,0 +1,17 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjEsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0",
+    "payload": "eyJkb21haW4iOiJib3JjLWZsYW1lLnZlcmNlbC5hcHAifQ",
+    "signature": ""
+  },
+  "frame": {
+    "version": "next",
+    "name": "BORC",
+    "homeUrl": "https://borc-flame.vercel.app",
+    "iconUrl": "https://borc-flame.vercel.app/favicon.ico",
+    "imageUrl": "https://borc-flame.vercel.app/favicon.ico",
+    "buttonTitle": "Play Now",
+    "splashImageUrl": "https://borc-flame.vercel.app/favicon.ico",
+    "splashBackgroundColor": "#0d0f1a"
+  }
+}
