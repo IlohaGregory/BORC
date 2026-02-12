@@ -10,58 +10,20 @@
       "use": "@vercel/node"
     }
   ],
-  "cleanUrls": false,
-  "trailingSlash": false,
   "routes": [
     { "src": "^/api/(.*)$", "dest": "/api/$1" },
-    { "src": "^/.well-known/farcaster.json$", "dest": "/client/.well-known/farcaster.json", "headers": { "Content-Type": "application/json" } },
-    { "src": "^/miniapp.manifest.json$", "dest": "/client/miniapp.manifest.json", "headers": { "Content-Type": "application/json" } },
-    { "src": "^/(.*)\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json)$", "dest": "/client/$1" },
+    {
+      "src": "^/.well-known/farcaster.json$",
+      "dest": "/client/farcaster-manifest.json",
+      "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+    },
+    {
+      "src": "^/farcaster-manifest.json$",
+      "dest": "/client/farcaster-manifest.json",
+      "headers": { "Content-Type": "application/json" }
+    },
+    { "src": "^/assets/(.*)$", "dest": "/client/assets/$1" },
+    { "src": "^/favicon.ico$", "dest": "/client/favicon.ico" },
     { "src": "/(.*)", "dest": "/client/index.html" }
-  ],
-  "headers": [
-    {
-      "source": "/.well-known/farcaster.json",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/json"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=86400, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/miniapp.manifest.json",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/json"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=86400, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "SAMEORIGIN"
-        },
-        {
-          "key": "X-XSS-Protection",
-          "value": "1; mode=block"
-        }
-      ]
-    }
   ]
 }
