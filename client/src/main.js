@@ -37,6 +37,24 @@ const config = {
   },
   dom: { createContainer: true },
   scene: [BootScene, PreloadScene, MenuScene, WaitingRoomScene, MissionSelectScene, DifficultySelectScene, GameScene, UIScene, GameOverScene],
+  // Mobile performance optimizations
+  fps: {
+    target: 60,
+    forceSetTimeOut: false
+  },
+  render: {
+    antialias: false,
+    pixelArt: true,
+    roundPixels: true,
+    transparent: false,
+    clearBeforeRender: true,
+    premultipliedAlpha: true,
+    preserveDrawingBuffer: false,
+    failIfMajorPerformanceCaveat: false,
+    powerPreference: 'high-performance',
+    batchSize: 4096
+  },
+  disableContextMenu: true
 };
 
 new Phaser.Game(config);

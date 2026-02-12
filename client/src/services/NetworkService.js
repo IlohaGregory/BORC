@@ -12,6 +12,63 @@ export class NetworkService {
     this.playerKey = null;
     this._inputSeq = 0;
     this._inputBuffer = [];
+    this._reconnectAttempts = 0;
+    this._maxReconnectAttempts = 5;
+    this._setupMobileHandlers();
+  }
+
+  _setupMobileHandlers() {
+    // Handle mobile app backgrounding
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.gameRoom) {
+          // App resumed - check connection health
+          this._checkConnectionHealth();
+        }
+      });
+    }
+
+    // Handle network state changes
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('online', () => {
+        console.info('[Network] Connection restored');
+        if (this.gameRoom) this._checkConnectionHealth();
+      });
+      window.addEventListener('offline', () => {
+        console.warn('[Network] Connection lost');
+      });
+    }
+  }
+
+  _checkConnectionHealth() {
+    if (!this.gameRoom || !this.gameRoom.connection) return;
+
+    try {
+      // Send ping to verify connection
+      this.gameRoom.send('ping', { timestamp: Date.now() });
+    } catch (err) {
+      console.warn('[Network] Connection health check failed:', err);
+      this._attemptReconnect();
+    }
+  }
+
+  async _attemptReconnect() {
+    if (this._reconnectAttempts >= this._maxReconnectAttempts) {
+      console.error('[Network] Max reconnect attempts reached');
+      return;
+    }
+
+    this._reconnectAttempts++;
+    console.info(`[Network] Reconnect attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts}`);
+
+    // Exponential backoff
+    const delay = Math.min(1000 * Math.pow(2, this._reconnectAttempts - 1), 10000);
+    await new Promise(resolve => setTimeout(resolve, delay));
+
+    // Trigger reconnection logic (game scene should handle this)
+    if (this.gameRoom) {
+      this.gameRoom.connection.close();
+    }
   }
 
   get room() { return this.gameRoom; }
@@ -71,7 +128,18 @@ export class NetworkService {
     this.gameRoom.onStateChange((s) => { this.gameState = s; });
     this.gameRoom.onMessage('player_dead', (m) => { this._lastPlayerDead = m; });
     this.gameRoom.onMessage('gameover', (m) => { this._lastGameOver = m; });
+    this.gameRoom.onError((code, message) => {
+      console.error('[Network] Room error:', code, message);
+    });
+    this.gameRoom.onLeave((code) => {
+      console.warn('[Network] Left room:', code);
+      if (code !== 1000) {
+        // Abnormal disconnect
+        this._attemptReconnect();
+      }
+    });
     this.sessionId = this.gameRoom.sessionId;
+    this._reconnectAttempts = 0; // Reset on successful connection
     console.info('[Network] joined game room', { roomId: this.gameRoom.roomId, sessionId: this.sessionId, playerKey: this.playerKey });
   }
 

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --open",
     "build": "vite build",
-    "preview": "vite preview --open"
+    "preview": "vite preview --open",
+    "build:miniapp": "vite build && cp public/miniapp.manifest.json dist/",
+    "verify": "node verify-build.js"
   },
   "dependencies": {
     "@coinbase/wallet-sdk": "^4.3.7",
@@ -16,6 +18,7 @@
     "viem": "^2.38.4"
   },
   "devDependencies": {
+    "terser": "^5.46.0",
     "vite": "^5.4.0"
   }
 }

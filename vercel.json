@@ -12,6 +12,39 @@
   ],
   "routes": [
     { "src": "^/api/(.*)$", "dest": "/api/$1" },
+    { "src": "/miniapp.manifest.json", "dest": "/client/miniapp.manifest.json" },
     { "src": "/(.*)", "dest": "/client/$1" }
+  ],
+  "headers": [
+    {
+      "source": "/miniapp.manifest.json",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
   ]
 }

@@ -1,0 +1,23 @@
+{
+  "name": "BORC",
+  "short_name": "BORC",
+  "description": "Multiplayer top-down shooter on Base",
+  "version": "0.1.0",
+  "base_app_id": "69891fb96dea3c7b8e14a02a",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0d0f1a",
+  "theme_color": "#0d0f1a",
+  "scope": "/",
+  "categories": ["games", "entertainment"],
+  "chain_id": 8453,
+  "network": "base-mainnet"
+}
