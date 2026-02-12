@@ -16,7 +16,7 @@
     "iconUrl": "https://borc-flame.vercel.app/icon.jpg",
     "imageUrl": "https://borc-flame.vercel.app/image.png",
     "buttonTitle": "Play Now",
-    "splashImageUrl": "https://borc-flame.vercel.app/icon.png",
+    "splashImageUrl": "https://borc-flame.vercel.app/icon.jpg",
     "splashBackgroundColor": "#0d0f1a",
     "heroImageUrl": "https://borc-flame.vercel.app/image.png"
   }
