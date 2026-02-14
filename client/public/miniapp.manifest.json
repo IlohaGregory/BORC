@@ -4,9 +4,13 @@
   "description": "Multiplayer top-down shooter on Base",
   "version": "0.1.0",
   "base_app_id": "69891fb96dea3c7b8e14a02a",
+  "iconUrl": "https://borc-flame.vercel.app/icon.jpg",
+  "imageUrl": "https://borc-flame.vercel.app/imageUrl.png",
+  "splashImageUrl": "https://borc-flame.vercel.app/icon.jpg",
+  "splashBackgroundColor": "#0d0f1a",
   "icons": [
     {
-      "src": "/favicon.ico",
+      "src": "https://borc-flame.vercel.app/favicon.ico",
       "sizes": "any",
       "type": "image/x-icon"
     }
