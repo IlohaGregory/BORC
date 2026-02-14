@@ -381,7 +381,7 @@ export default class WaitingRoomScene extends Phaser.Scene {
         html += `<div style="margin:4px 0;font-size:11px;">
           ${getDisplayName(f)} ${status}`;
         if (f.online && this._squad) {
-          html += ` <button data-invite-friend="${f.address}" class="inviteFriendBtn" style="font-size:9px;cursor:pointer;">Invite</button>`;
+          html += ` <button data-invite-friend="${f.address}" class="inviteFriendBtn" style="font-size:9px;cursor:pointer;background:#fff;color:#000;border:1px solid #000;border-radius:3px;padding:2px 6px;">Invite</button>`;
         }
         html += `</div>`;
       });
@@ -449,7 +449,7 @@ export default class WaitingRoomScene extends Phaser.Scene {
       if (!isLeader) {
         const me = sq.members.find(m => m.address === myAddr);
         const amReady = me?.ready ?? false;
-        html += `<button id="readyBtn" style="font-size:11px;cursor:pointer;padding:4px 10px;">${amReady ? 'Unready' : 'Ready'}</button>`;
+        html += `<button id="readyBtn" style="font-size:11px;cursor:pointer;padding:4px 10px;background:#fff;color:#000;border:1px solid #000;border-radius:4px;">${amReady ? 'Unready' : 'Ready'}</button>`;
       }
       html += `<button id="leaveSquadBtn" style="font-size:11px;cursor:pointer;padding:4px 10px;;background:#fff;color:#000;">Leave</button>`;
       if (isLeader) {
